@@ -109,7 +109,7 @@ class MarketDataViewer(QMainWindow):
         # Plot market data
         if market_data is not None and not market_data.empty:
             try:
-                market_data['timestamp'] = pd.to_datetime(market_data['timestamp'])
+                market_data['timestamp'] = pd.to_datetime(market_data['timestamp'], format='%H:%M:%S.%f')
                 self.ax.plot(market_data['timestamp'], market_data['bidPrice'], label='Bid Price')
                 self.ax.plot(market_data['timestamp'], market_data['askPrice'], label='Ask Price')
             except Exception as e:
@@ -118,7 +118,7 @@ class MarketDataViewer(QMainWindow):
         # Plot trade data
         if trade_data is not None and not trade_data.empty:
             try:
-                trade_data['timestamp'] = pd.to_datetime(trade_data['timestamp'])
+                trade_data['timestamp'] = pd.to_datetime(trade_data['timestamp'], format='%H:%M:%S.%f')
                 self.ax.scatter(trade_data['timestamp'], trade_data['price'], color='red', label='Trade', s=trade_data.get('volume', 50))
             except Exception as e:
                 logging.error(f"Error plotting trade data: {e}")
