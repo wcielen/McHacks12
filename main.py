@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import logging
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QComboBox, QPushButton, QWidget, QFileDialog
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
 
 # Set up logging to only log errors
 logging.basicConfig(level=logging.ERROR)
@@ -38,8 +39,13 @@ class MarketDataViewer(QMainWindow):
         self.figure, self.ax = plt.subplots(figsize=(8, 6))
         self.canvas = FigureCanvas(self.figure)
         
+        # Add navigation toolbar with all tools enabled
+        self.toolbar = NavigationToolbar2QT(self.canvas, self)
+        self.toolbar.pan()  # Enable pan mode by default
+        
         # Add widgets to main layout
         main_layout.addLayout(controls_layout)
+        main_layout.addWidget(self.toolbar)  # Add toolbar before canvas
         main_layout.addWidget(self.canvas)
         
         # Connect signals
@@ -132,6 +138,9 @@ class MarketDataViewer(QMainWindow):
             self.ax.legend()
         
         self.ax.set_title(f"{self.period_combo.currentText()} - Stock {self.stock_combo.currentText()}")
+        
+        # Enable tight layout and auto-adjust
+        plt.tight_layout()
         self.canvas.draw()
 
 if __name__ == '__main__':
