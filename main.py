@@ -102,7 +102,7 @@ class MarketDataViewer(QMainWindow):
             return None
 
     def load_trade_data(self, data_dir, stock):
-        file_path = os.path.join(data_dir, f"trade_data__{stock}.csv")
+        file_path = os.path.join(data_dir, f"trade_data_{stock}.csv")
         try:
             return pd.read_csv(file_path)
         except FileNotFoundError:
