@@ -6,8 +6,8 @@ import logging
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QComboBox, QPushButton, QWidget, QFileDialog
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
-# Set up logging
-logging.basicConfig(level=logging.DEBUG)
+# Set up logging to only log errors
+logging.basicConfig(level=logging.ERROR)
 
 class MarketDataViewer(QMainWindow):
     def __init__(self):
@@ -15,7 +15,6 @@ class MarketDataViewer(QMainWindow):
         
         # Get the absolute path of the script's directory
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
-        logging.debug(f"Base directory: {self.base_dir}")
         
         self.setWindowTitle("Market Data Viewer")
         self.setGeometry(100, 100, 800, 600)
@@ -65,7 +64,6 @@ class MarketDataViewer(QMainWindow):
         
         # Construct full path to data directory
         data_dir = os.path.join(self.base_dir, 'TrainingData', period, stock)
-        logging.debug(f"Attempting to load data from: {data_dir}")
         
         # Load market data
         market_data = self.load_market_data(data_dir, stock)
@@ -82,7 +80,6 @@ class MarketDataViewer(QMainWindow):
             for file in os.listdir(data_dir):
                 if file.startswith(f"market_data_{stock}") and file.endswith('.csv'):
                     file_path = os.path.join(data_dir, file)
-                    logging.debug(f"Loading market data file: {file_path}")
                     try:
                         df = pd.read_csv(file_path)
                         all_data.append(df)
@@ -90,7 +87,7 @@ class MarketDataViewer(QMainWindow):
                         logging.error(f"Error reading file {file_path}: {e}")
             
             if not all_data:
-                logging.warning(f"No market data files found in {data_dir}")
+                logging.error(f"No market data files found in {data_dir}")
                 return None
             
             return pd.concat(all_data)
@@ -100,7 +97,6 @@ class MarketDataViewer(QMainWindow):
 
     def load_trade_data(self, data_dir, stock):
         file_path = os.path.join(data_dir, f"trade_data__{stock}.csv")
-        logging.debug(f"Attempting to load trade data file: {file_path}")
         try:
             return pd.read_csv(file_path)
         except FileNotFoundError:
