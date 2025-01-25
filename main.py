@@ -41,7 +41,7 @@ class MarketDataViewer(QMainWindow):
         
         # Add navigation toolbar with all tools enabled
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
-        self.toolbar.pan()  # Enable pan mode by default
+
         
         # Add widgets to main layout
         main_layout.addLayout(controls_layout)
