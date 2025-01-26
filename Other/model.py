@@ -157,5 +157,5 @@ def main(base_path):
 
 # Example usage
 if __name__ == '__main__':
-    base_path = './TrainingData'
+    base_path = '../TrainingData'
     main(base_path)
