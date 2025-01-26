@@ -1,44 +1,84 @@
 import pandas as pd
+import numpy as np
+from typing import Optional
 
-def predict_price_changes(market_data):
-    if market_data is None or market_data.empty:
+
+def predict_price_changes(market_data: pd.DataFrame) -> Optional[pd.DataFrame]:
+    """
+    Predict price changes based on market data analysis.
+
+    Args:
+        market_data: DataFrame containing market data
+
+    Returns:
+        DataFrame with predictions or None if insufficient data
+    """
+    if market_data is None or len(market_data) < 30:  # Minimum required for long EMA
         return None
 
-    market_data['timestamp'] = pd.to_datetime(market_data['timestamp'], format='%H:%M:%S.%f')
-    market_data = market_data.sort_values('timestamp')
+    try:
+        # Work with a copy to prevent modifications to original data
+        data = market_data.copy()
 
-    market_data['ema_short'] = market_data['bidPrice'].ewm(span=10, adjust=False).mean()
-    market_data['ema_long'] = market_data['bidPrice'].ewm(span=30, adjust=False).mean()
+        # Ensure timestamp is datetime
+        data['timestamp'] = pd.to_datetime(data['timestamp'], format='%H:%M:%S.%f')
+        data = data.sort_values('timestamp')
 
-    market_data['momentum'] = market_data['bidPrice'].diff(periods=10)
-    market_data['volatility'] = market_data['bidPrice'].rolling(window=20).std()
+        # Calculate technical indicators
+        data['ema_short'] = data['bidPrice'].ewm(span=10, adjust=False).mean()
+        data['ema_long'] = data['bidPrice'].ewm(span=30, adjust=False).mean()
+        data['momentum'] = data['bidPrice'].diff(periods=10)
+        data['volatility'] = data['bidPrice'].rolling(window=20, min_periods=1).std()
 
-    market_data['trend_change'] = (
-            (market_data['ema_short'] > market_data['ema_long']) &
-            (market_data['momentum'].abs() > market_data['volatility'])
-    )
+        # Identify trend changes
+        data['trend_change'] = (
+                (data['ema_short'] > data['ema_long']) &
+                (data['momentum'].abs() > data['volatility'])
+        )
 
-    prediction_window = 5
-    predictions = []
+        prediction_window = 5
+        predictions = []
 
-    for i in range(len(market_data)):
-        if market_data.loc[i, 'trend_change']:
-            if i + prediction_window < len(market_data):
-                future_timestamps = market_data.loc[i + 1:i + prediction_window, 'timestamp']
+        # Find trend change points and generate predictions
+        trend_change_indices = data.index[data['trend_change']].tolist()
 
-                momentum = market_data.loc[i, 'momentum']
-                start_price = market_data.loc[i, 'bidPrice']
+        for idx in trend_change_indices:
+            if idx + prediction_window >= len(data):
+                continue
 
-                future_prices = [start_price + momentum * (j + 1) for j in range(prediction_window)]
+            momentum = data.loc[idx, 'momentum']
+            start_price = data.loc[idx, 'bidPrice']
 
-                for timestamp, price in zip(future_timestamps, future_prices):
-                    predictions.append({
-                        'timestamp': timestamp,
-                        'predicted_price': price
-                    })
+            # Generate future timestamps and prices
+            future_slice = data.iloc[idx + 1:idx + prediction_window + 1]
 
-    if predictions:
-        prediction_df = pd.DataFrame(predictions)
-        return prediction_df
+            # Calculate predicted prices using momentum
+            price_changes = np.arange(1, prediction_window + 1) * momentum
+            predicted_prices = start_price + price_changes
 
-    return None
+            # Create prediction entries
+            predictions.extend([
+                {
+                    'timestamp': ts,
+                    'predicted_price': price
+                }
+                for ts, price in zip(future_slice['timestamp'], predicted_prices)
+            ])
+
+        # Convert predictions to DataFrame if any exist
+        if predictions:
+            prediction_df = pd.DataFrame(predictions)
+
+            # Remove duplicate predictions for the same timestamp
+            prediction_df = prediction_df.groupby('timestamp')['predicted_price'].mean().reset_index()
+
+            # Sort by timestamp
+            prediction_df = prediction_df.sort_values('timestamp')
+
+            return prediction_df
+
+        return None
+
+    except Exception as e:
+        print(f"Error in price prediction: {str(e)}")
+        return None

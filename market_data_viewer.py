@@ -1,13 +1,13 @@
 import os
 from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout,
-                             QComboBox, QPushButton, QWidget, QCheckBox, QLabel)
+                             QComboBox, QPushButton, QWidget, QCheckBox)
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
 import matplotlib.pyplot as plt
 from data_loader import load_market_data, load_trade_data
 from price_prediction import predict_price_changes
 import pandas as pd
-from weakref import WeakKeyDictionary
+from typing import Dict, Optional
 import gc
 
 
@@ -24,15 +24,14 @@ class MarketDataViewer(QMainWindow):
         ('pnl_check', "Show PNL", True),
         ('pnl_percent_check', "PNL as Percentage", True)
     ]
-    INITIAL_INVESTMENT = 1_000_000  # $1,000,000 initial investment
+    INITIAL_INVESTMENT = 1_000_000
 
     def __init__(self):
         super().__init__()
-        self._data_cache = WeakKeyDictionary()
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
+        self.plot_elements: Dict = {}
         self._setup_ui()
         self._connect_signals()
-        self.min_max_lines = WeakKeyDictionary()
 
     def _setup_ui(self):
         self.setWindowTitle("Market Data Viewer")
@@ -43,215 +42,179 @@ class MarketDataViewer(QMainWindow):
         main_widget.setLayout(main_layout)
         self.setCentralWidget(main_widget)
 
-        # Create layouts
-        controls_layout = self._create_controls_layout()
-        stock_layout = self._create_stock_layout()
-        toggle_layout = QHBoxLayout()
-        self._setup_visualization_toggles(toggle_layout)
+        main_layout.addLayout(self._create_controls_layout())
+        main_layout.addLayout(self._create_stock_layout())
+        main_layout.addLayout(self._create_toggle_layout())
 
-        # Setup matplotlib with two subplots
         self.figure, (self.ax_price, self.ax_pnl) = plt.subplots(2, 1, figsize=(12, 9), height_ratios=[2, 1])
         self.canvas = FigureCanvas(self.figure)
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
 
-        # Add layouts to main layout
-        main_layout.addLayout(controls_layout)
-        main_layout.addLayout(stock_layout)
-        main_layout.addLayout(toggle_layout)
         main_layout.addWidget(self.toolbar)
         main_layout.addWidget(self.canvas)
 
-        # Initialize plot storage with weak references
-        self.plot_lines = WeakKeyDictionary()
-        self.std_dev_fills = WeakKeyDictionary()
-        self.prediction_lines = WeakKeyDictionary()
-        self.pnl_lines = WeakKeyDictionary()
-
     def _create_controls_layout(self):
-        controls_layout = QHBoxLayout()
+        layout = QHBoxLayout()
         self.period_combo = QComboBox()
-        self.load_button = QPushButton("Load Data")
-
-        # Add periods to combo box
         self.period_combo.addItems([f"Period{i}" for i in range(1, 21)])
         self.period_combo.setCurrentText("Period1")
 
-        controls_layout.addWidget(self.period_combo)
-        controls_layout.addWidget(self.load_button)
-        return controls_layout
+        self.load_button = QPushButton("Load Data")
+        layout.addWidget(self.period_combo)
+        layout.addWidget(self.load_button)
+        return layout
 
     def _create_stock_layout(self):
-        stock_layout = QHBoxLayout()
-        self.stock_checkboxes = {
-            stock: QCheckBox(stock) for stock in self.STOCKS
-        }
-        # Set only 'A' checked by default
+        layout = QHBoxLayout()
+        self.stock_checkboxes = {stock: QCheckBox(stock) for stock in self.STOCKS}
         self.stock_checkboxes['A'].setChecked(True)
-
         for checkbox in self.stock_checkboxes.values():
-            stock_layout.addWidget(checkbox)
-        return stock_layout
+            layout.addWidget(checkbox)
+        return layout
 
-    def _setup_visualization_toggles(self, layout):
+    def _create_toggle_layout(self):
+        layout = QHBoxLayout()
         for toggle_attr, label_text, default_state in self.VISUALIZATION_TOGGLES:
             checkbox = QCheckBox(label_text)
             checkbox.setChecked(default_state)
             setattr(self, toggle_attr, checkbox)
             layout.addWidget(checkbox)
+        return layout
 
     def _connect_signals(self):
         self.load_button.clicked.connect(self.load_and_plot_data)
         for toggle_attr, _, _ in self.VISUALIZATION_TOGGLES:
             toggle = getattr(self, toggle_attr)
-            if toggle is not None:
-                toggle.stateChanged.connect(self.update_plot_visibility)
+            toggle.stateChanged.connect(self.update_plot_visibility)
 
-    def _plot_market_data(self, market_data, stock):
+    def _process_market_data(self, market_data: pd.DataFrame) -> Optional[pd.DataFrame]:
+        if market_data is None or market_data.empty:
+            return None
+        market_data = market_data.copy()
         market_data['timestamp'] = pd.to_datetime(market_data['timestamp'], format='%H:%M:%S.%f')
+        return market_data
+
+    def _plot_market_data(self, market_data: pd.DataFrame, stock: str):
+        if market_data is None:
+            return
 
         if self.bid_price_check.isChecked():
             line, = self.ax_price.plot(market_data['timestamp'],
                                        market_data['bidPrice'],
                                        label=f'{stock} Bid Price')
-            self.plot_lines[line] = f'{stock}_bid'
+            self.plot_elements[f'{stock}_bid'] = line
 
         if self.ask_price_check.isChecked():
             line, = self.ax_price.plot(market_data['timestamp'],
                                        market_data['askPrice'],
                                        label=f'{stock} Ask Price')
-            self.plot_lines[line] = f'{stock}_ask'
+            self.plot_elements[f'{stock}_ask'] = line
 
         self._plot_standard_deviation(market_data, stock)
         self._plot_min_max_lines(market_data, stock)
 
-    def _plot_min_max_lines(self, market_data, stock):
-        """Plot minimum and maximum price lines for the stock"""
-        if self.min_max_check.isChecked():
-            # Calculate min and max prices
-            min_price = market_data['bidPrice'].min()
-            max_price = market_data['askPrice'].max()
+    def _plot_min_max_lines(self, market_data: pd.DataFrame, stock: str):
+        if not self.min_max_check.isChecked():
+            return
 
-            # Create horizontal lines for min and max
-            min_line = self.ax_price.axhline(
-                y=min_price,
-                color='red',
-                linestyle=':',
-                label=f'{stock} Min Price ({min_price:.2f})'
-            )
-            max_line = self.ax_price.axhline(
-                y=max_price,
-                color='green',
-                linestyle=':',
-                label=f'{stock} Max Price ({max_price:.2f})'
-            )
+        min_price = market_data['bidPrice'].min()
+        max_price = market_data['askPrice'].max()
 
-            # Store references to the lines
-            self.min_max_lines[min_line] = f'{stock}_min'
-            self.min_max_lines[max_line] = f'{stock}_max'
+        min_line = self.ax_price.axhline(y=min_price, color='red', linestyle=':',
+                                         label=f'{stock} Min Price ({min_price:.2f})')
+        max_line = self.ax_price.axhline(y=max_price, color='green', linestyle=':',
+                                         label=f'{stock} Max Price ({max_price:.2f})')
 
-    def _plot_standard_deviation(self, market_data, stock):
+        self.plot_elements[f'{stock}_min'] = min_line
+        self.plot_elements[f'{stock}_max'] = max_line
+
+    def _plot_standard_deviation(self, market_data: pd.DataFrame, stock: str):
         std_dev_configs = [
             (self.std_dev_30s_check, 30, 'blue'),
             (self.std_dev_60s_check, 60, 'red')
         ]
 
         for checkbox, window_seconds, color in std_dev_configs:
-            if checkbox.isChecked():
-                window_size = int(window_seconds * 1000)
-                std_dev = market_data['bidPrice'].rolling(
-                    window=window_size,
-                    min_periods=1
-                ).std()
+            if not checkbox.isChecked():
+                continue
 
-                lower_bound = market_data['bidPrice'] - std_dev
-                upper_bound = market_data['bidPrice'] + std_dev
+            window_size = int(window_seconds * 1000)
+            std_dev = market_data['bidPrice'].rolling(window=window_size, min_periods=1).std()
+            lower_bound = market_data['bidPrice'] - std_dev
+            upper_bound = market_data['bidPrice'] + std_dev
 
-                fill = self.ax_price.fill_between(
-                    market_data['timestamp'],
-                    lower_bound,
-                    upper_bound,
-                    alpha=0.2,
-                    color=color,
-                    label=f'{stock} {window_seconds}s Std Dev'
-                )
-                self.std_dev_fills[fill] = f'{stock}_{window_seconds}s'
+            fill = self.ax_price.fill_between(
+                market_data['timestamp'],
+                lower_bound,
+                upper_bound,
+                alpha=0.2,
+                color=color,
+                label=f'{stock} {window_seconds}s Std Dev'
+            )
+            self.plot_elements[f'{stock}_{window_seconds}s_std'] = fill
 
-    def _plot_predictions(self, market_data, stock):
+    def _plot_predictions(self, market_data: pd.DataFrame, stock: str):
         prediction_data = predict_price_changes(market_data)
-        if prediction_data is not None and not prediction_data.empty:
-            line, = self.ax_price.plot(
-                prediction_data['timestamp'],
-                prediction_data['predicted_price'],
-                color='orange',
-                linestyle='--',
-                label=f'{stock} Predicted Price',
-                alpha=0.7
-            )
-            self.prediction_lines[line] = f'{stock}_prediction'
+        if prediction_data is None or prediction_data.empty:
+            return
 
-    def _plot_trade_data(self, trade_data, stock):
-        if self.trades_check.isChecked():
-            trade_data['timestamp'] = pd.to_datetime(
-                trade_data['timestamp'],
-                format='%H:%M:%S.%f'
-            )
-            line, = self.ax_price.plot(
-                trade_data['timestamp'],
-                trade_data['price'],
-                linestyle='-',
-                marker='',
-                label=f'{stock} Trade Price',
-                alpha=0.7
-            )
-            self.plot_lines[line] = f'{stock}_trade'
+        line, = self.ax_price.plot(
+            prediction_data['timestamp'],
+            prediction_data['predicted_price'],
+            color='orange',
+            linestyle='--',
+            label=f'{stock} Predicted Price',
+            alpha=0.7
+        )
+        self.plot_elements[f'{stock}_prediction'] = line
+        del prediction_data
 
-    def _calculate_pnl(self, market_data, stock):
-        """Calculate PNL based on bid price movements"""
-        if market_data is None or market_data.empty:
-            return None
+    def _plot_trade_data(self, trade_data: pd.DataFrame, stock: str):
+        if not self.trades_check.isChecked() or trade_data is None:
+            return
 
-        # Calculate theoretical position size
+        trade_data = trade_data.copy()
+        trade_data['timestamp'] = pd.to_datetime(trade_data['timestamp'], format='%H:%M:%S.%f')
+
+        line, = self.ax_price.plot(
+            trade_data['timestamp'],
+            trade_data['price'],
+            linestyle='-',
+            marker='',
+            label=f'{stock} Trade Price',
+            alpha=0.7
+        )
+        self.plot_elements[f'{stock}_trade'] = line
+
+    def _calculate_and_plot_pnl(self, market_data: pd.DataFrame, stock: str):
+        if not self.pnl_check.isChecked() or market_data is None:
+            return
+
         initial_price = market_data['bidPrice'].iloc[0]
         position_size = self.INITIAL_INVESTMENT / initial_price
 
-        # Calculate PNL
-        pnl_data = pd.DataFrame()
-        pnl_data['timestamp'] = market_data['timestamp']
-        pnl_data['absolute_pnl'] = (market_data['bidPrice'] - initial_price) * position_size
-        pnl_data['percent_pnl'] = (market_data['bidPrice'] / initial_price - 1) * 100
-
-        return pnl_data
-
-    def _plot_pnl(self, market_data, stock):
-        pnl_data = self._calculate_pnl(market_data, stock)
-        if pnl_data is None:
-            return
-
         if self.pnl_percent_check.isChecked():
-            line, = self.ax_pnl.plot(
-                pnl_data['timestamp'],
-                pnl_data['percent_pnl'],
-                label=f'{stock} PNL %'
-            )
-            self.pnl_lines[line] = f'{stock}_pnl_percent'
+            pnl = (market_data['bidPrice'] / initial_price - 1) * 100
+            ylabel = 'PNL (%)'
         else:
-            line, = self.ax_pnl.plot(
-                pnl_data['timestamp'],
-                pnl_data['absolute_pnl'],
-                label=f'{stock} PNL $'
-            )
-            self.pnl_lines[line] = f'{stock}_pnl_absolute'
+            pnl = (market_data['bidPrice'] - initial_price) * position_size
+            ylabel = 'PNL ($)'
 
-    def load_and_plot_data(self):
-        # Clear previous plots
+        line, = self.ax_pnl.plot(market_data['timestamp'], pnl, label=f'{stock} {ylabel}')
+        self.plot_elements[f'{stock}_pnl'] = line
+        self.ax_pnl.set_ylabel(ylabel)
+
+    def _clear_plots(self):
         self.ax_price.clear()
         self.ax_pnl.clear()
-        self.plot_lines.clear()
-        self.std_dev_fills.clear()
-        self.prediction_lines.clear()
-        self.pnl_lines.clear()
-        self.min_max_lines.clear()
+        for element in self.plot_elements.values():
+            if hasattr(element, 'remove'):
+                element.remove()
+        self.plot_elements.clear()
         gc.collect()
+
+    def load_and_plot_data(self):
+        self._clear_plots()
 
         period = self.period_combo.currentText()
         selected_stocks = [stock for stock, checkbox in self.stock_checkboxes.items()
@@ -260,7 +223,7 @@ class MarketDataViewer(QMainWindow):
         for stock in selected_stocks:
             data_dir = os.path.join(self.base_dir, 'TrainingData', period, stock)
 
-            market_data = load_market_data(data_dir, stock)
+            market_data = self._process_market_data(load_market_data(data_dir, stock))
             if market_data is not None:
                 self._plot_market_data(market_data, stock)
 
@@ -268,90 +231,49 @@ class MarketDataViewer(QMainWindow):
                     self._plot_predictions(market_data, stock)
 
                 if self.pnl_check.isChecked():
-                    self._plot_pnl(market_data, stock)
+                    self._calculate_and_plot_pnl(market_data, stock)
 
                 del market_data
+                gc.collect()
 
             trade_data = load_trade_data(data_dir, stock)
             if trade_data is not None:
                 self._plot_trade_data(trade_data, stock)
                 del trade_data
+                gc.collect()
 
         self._update_plot_layout()
-        gc.collect()
 
     def _update_plot_layout(self):
-        # Price chart
         self.ax_price.set_xlabel('')
         self.ax_price.set_ylabel('Price')
         self.ax_price.set_title(f"{self.period_combo.currentText()} - Selected Stocks")
         if self.ax_price.get_lines() or self.ax_price.collections:
             self.ax_price.legend()
 
-        # PNL chart
+        self.ax_pnl.set_visible(self.pnl_check.isChecked())
         if self.pnl_check.isChecked():
-            self.ax_pnl.set_visible(True)
             self.ax_pnl.set_xlabel('Time')
-            if self.pnl_percent_check.isChecked():
-                self.ax_pnl.set_ylabel('PNL (%)')
-            else:
-                self.ax_pnl.set_ylabel('PNL ($)')
             if self.ax_pnl.get_lines():
                 self.ax_pnl.legend()
-        else:
-            self.ax_pnl.set_visible(False)
 
         plt.tight_layout()
         self.canvas.draw()
 
     def update_plot_visibility(self):
-        # Update original plot visibilities
-        visibility_map = {
-            'bid': self.bid_price_check.isChecked(),
-            'ask': self.ask_price_check.isChecked(),
-            'trade': self.trades_check.isChecked()
-        }
+        needs_reload = False
 
-        for line, key in self.plot_lines.items():
-            line.set_visible(any(
-                vis_type in key
-                for vis_type in visibility_map
-                if visibility_map[vis_type]
-            ))
+        if any(attr in ('pnl_check', 'pnl_percent_check')
+               for attr, _, _ in self.VISUALIZATION_TOGGLES
+               if getattr(self, attr).isChecked()):
+            needs_reload = True
 
-        # Update min/max lines visibility
-        for line in self.min_max_lines:
-            line.set_visible(self.min_max_check.isChecked())
-
-        std_dev_visibility = {
-            '30s': self.std_dev_30s_check.isChecked(),
-            '60s': self.std_dev_60s_check.isChecked()
-        }
-
-        for fill, key in self.std_dev_fills.items():
-            fill.set_visible(any(
-                dev_type in key
-                for dev_type in std_dev_visibility
-                if std_dev_visibility[dev_type]
-            ))
-
-        for line in self.prediction_lines:
-            line.set_visible(self.prediction_check.isChecked())
-
-        # Update PNL visibility
-        self.ax_pnl.set_visible(self.pnl_check.isChecked())
-        if self.pnl_check.isChecked():
-            # Reload data to switch between percentage and absolute values
+        if needs_reload:
             self.load_and_plot_data()
-
-        self.canvas.draw()
+        else:
+            self._update_plot_layout()
 
     def closeEvent(self, event):
+        self._clear_plots()
         plt.close(self.figure)
-        self.plot_lines.clear()
-        self.std_dev_fills.clear()
-        self.prediction_lines.clear()
-        self.pnl_lines.clear()
-        self.min_max_lines.clear()
-        gc.collect()
         super().closeEvent(event)
