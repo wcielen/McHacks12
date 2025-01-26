@@ -73,7 +73,7 @@ class MarketDataViewer(QMainWindow):
         self.load_button = QPushButton("Load Data")
 
         # Add periods to combo box
-        self.period_combo.addItems([f"Period{i}" for i in range(1, 16)])
+        self.period_combo.addItems([f"Period{i}" for i in range(1, 21)])
         self.period_combo.setCurrentText("Period1")
 
         controls_layout.addWidget(self.period_combo)
