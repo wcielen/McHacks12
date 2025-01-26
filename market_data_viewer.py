@@ -244,8 +244,15 @@ class MarketDataViewer(QMainWindow):
         self.ax_price.clear()
         self.ax_pnl.clear()
         for element in self.plot_elements.values():
-            if hasattr(element, 'remove'):
-                element.remove()
+            try:
+                if hasattr(element, 'remove'):
+                    element.remove()
+                else:
+                    # For collections like fill_between areas
+                    element.remove()
+            except NotImplementedError:
+                # Handle unsupported remove calls
+                pass
         self.plot_elements.clear()
         gc.collect()
 
