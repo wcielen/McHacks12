@@ -11,7 +11,6 @@ from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
 # Set up logging to only log errors
 logging.basicConfig(level=logging.ERROR)
 
-
 class MarketDataViewer(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -40,7 +39,7 @@ class MarketDataViewer(QMainWindow):
         stock_layout = QHBoxLayout()
         for stock in ['A', 'B', 'C', 'D', 'E']:
             checkbox = QCheckBox(stock)
-            checkbox.setChecked(True)  # Default to all checked
+            checkbox.setChecked(stock == 'A')  # Default to 'A' checked
             self.stock_checkboxes[stock] = checkbox
             stock_layout.addWidget(checkbox)
 
@@ -99,9 +98,10 @@ class MarketDataViewer(QMainWindow):
         self.std_dev_30s_check.stateChanged.connect(self.update_plot_visibility)
         self.std_dev_60s_check.stateChanged.connect(self.update_plot_visibility)
 
-        # Initialize period combo box
+        # Initialize period combo box with "Period1" as the default selection
         for i in range(1, 16):
             self.period_combo.addItem(f"Period{i}")
+        self.period_combo.setCurrentText("Period1")
 
     def load_and_plot_data(self):
         # Get selected period
@@ -323,7 +323,6 @@ class MarketDataViewer(QMainWindow):
             return prediction_df
 
         return None
-
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
