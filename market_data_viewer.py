@@ -4,9 +4,11 @@ from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout,
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
 import matplotlib.pyplot as plt
+import pandas as pd
+from Other.training import PredictionPlotter
 from data_loader import load_market_data, load_trade_data
 from price_prediction import predict_price_changes
-import pandas as pd
+#from .Other.model import load_model_and_predict
 from weakref import WeakKeyDictionary
 import gc
 
@@ -64,6 +66,7 @@ class MarketDataViewer(QMainWindow):
         self.std_dev_fills = WeakKeyDictionary()
         self.prediction_lines = WeakKeyDictionary()
         self.pnl_lines = WeakKeyDictionary()
+        self.prediction_plotter = PredictionPlotter(self.ax_price, self.prediction_lines)
 
     def _create_controls_layout(self):
         controls_layout = QHBoxLayout()
@@ -118,6 +121,13 @@ class MarketDataViewer(QMainWindow):
                                        market_data['askPrice'],
                                        label=f'{stock} Ask Price')
             self.plot_lines[line] = f'{stock}_ask'
+
+        if self.prediction_check.isChecked():
+            self.prediction_plotter.plot_predictions(
+                market_data, 
+                stock, 
+                show_predictions=True
+            )
 
         self._plot_standard_deviation(market_data, stock)
 
@@ -310,6 +320,13 @@ class MarketDataViewer(QMainWindow):
         if self.pnl_check.isChecked():
             # Reload data to switch between percentage and absolute values
             self.load_and_plot_data()
+        
+        for key, line in self.prediction_lines.items():
+            line.set_visible(self.prediction_check.isChecked())
+            if f"{key.split('_')[0]}_confidence" in self.prediction_plotter.confidence_bands:
+                self.prediction_plotter.confidence_bands[f"{key.split('_')[0]}_confidence"].set_visible(
+                    self.prediction_check.isChecked()
+                )
 
         self.canvas.draw()
 
