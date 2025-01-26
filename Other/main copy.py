@@ -295,7 +295,8 @@ class MarketDataViewer(QMainWindow):
         visibility_map = {
             'bid': self.bid_price_check.isChecked(),
             'ask': self.ask_price_check.isChecked(),
-            'trade': self.trades_check.isChecked()
+            'trade': self.trades_check.isChecked(),
+            'model_prediction': self.model_prediction_check.isChecked()
         }
 
         for key, line in self.plot_lines.items():

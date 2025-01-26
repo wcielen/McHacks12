@@ -110,7 +110,7 @@ class PredictionPlotter:
                 prediction_data['upper_prediction'],
                 color='orange',
                 alpha=0.1,
-                label=f'{stock} Prediction Interval'
+                label=f'{stock} Prediction '
             )
             self.confidence_bands[f'{stock}_confidence'] = confidence_band
             

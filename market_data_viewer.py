@@ -21,7 +21,7 @@ class MarketDataViewer(QMainWindow):
         ('trades_check', "Trades", True),
         ('minmax_lines_check', "Show Min/Max Lines", False),
         ('prediction_check', "Price Prediction", True),
-         ('model_prediction_check', "Model Prediction", True),
+        ('model_prediction_check', "Model Prediction", True),
         ('std_dev_30s_check', "30s Std Dev", False),
         ('std_dev_60s_check', "60s Std Dev", False),
         ('pnl_check', "Show PNL", True),
