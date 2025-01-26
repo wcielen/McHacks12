@@ -168,6 +168,20 @@ class MarketDataViewer(QMainWindow):
             label=f'{stock} Predicted Price',
             alpha=0.7
         )
+        last_timestamp = market_data['timestamp'].iloc[-1]
+        next_timestamp = last_timestamp + pd.Timedelta(microseconds=1)
+        last_predicted_price = prediction_data['predicted_price'].iloc[-1]
+        next_predicted_price = last_predicted_price  # Replace with actual prediction logic if available
+
+        self.ax_price.plot(
+            [last_timestamp, next_timestamp],
+            [last_predicted_price, next_predicted_price],
+            color='purple',
+            linestyle=':',
+            marker='o',
+            markersize=5,
+            label=f'{stock} Next Prediction'
+        )
         self.plot_elements[f'{stock}_prediction'] = line
         del prediction_data
 
