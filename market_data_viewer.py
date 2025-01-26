@@ -4,9 +4,11 @@ from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout,
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
 import matplotlib.pyplot as plt
+import pandas as pd
+from Other.training import PredictionPlotter
 from data_loader import load_market_data, load_trade_data
 from price_prediction import predict_price_changes
-import pandas as pd
+#from .Other.model import load_model_and_predict
 from weakref import WeakKeyDictionary
 import gc
 
@@ -19,6 +21,7 @@ class MarketDataViewer(QMainWindow):
         ('trades_check', "Trades", True),
         ('minmax_lines_check', "Show Min/Max Lines", False),
         ('prediction_check', "Price Prediction", True),
+         ('model_prediction_check', "Model Prediction", True),
         ('std_dev_30s_check', "30s Std Dev", False),
         ('std_dev_60s_check', "60s Std Dev", False),
         ('pnl_check', "Show PNL", True),
@@ -66,6 +69,7 @@ class MarketDataViewer(QMainWindow):
         self.prediction_lines = WeakKeyDictionary()
         self.pnl_lines = WeakKeyDictionary()
         self.minmax_lines = WeakKeyDictionary()
+        self.prediction_plotter = PredictionPlotter(self.ax_price, self.prediction_lines)
 
     def _create_controls_layout(self):
         controls_layout = QHBoxLayout()
@@ -109,30 +113,44 @@ class MarketDataViewer(QMainWindow):
     def _plot_market_data(self, market_data, stock):
         market_data['timestamp'] = pd.to_datetime(market_data['timestamp'], format='%H:%M:%S.%f')
 
-        # Plot min/max lines if enabled
-        if self.minmax_lines_check.isChecked():
-            min_price = market_data['bidPrice'].min()
-            max_price = market_data['bidPrice'].max()
-            
-            min_line = self.ax_price.axhline(y=min_price, color='red', linestyle=':', label=f'{stock} Min Price')
-            max_line = self.ax_price.axhline(y=max_price, color='green', linestyle=':', label=f'{stock} Max Price')
-            
-            self.minmax_lines[min_line] = f'{stock}_min'
-            self.minmax_lines[max_line] = f'{stock}_max'
-
         if self.bid_price_check.isChecked():
             line, = self.ax_price.plot(market_data['timestamp'],
-                                       market_data['bidPrice'],
-                                       label=f'{stock} Bid Price')
+                                     market_data['bidPrice'],
+                                     label=f'{stock} Bid Price')
             self.plot_lines[line] = f'{stock}_bid'
 
         if self.ask_price_check.isChecked():
             line, = self.ax_price.plot(market_data['timestamp'],
-                                       market_data['askPrice'],
-                                       label=f'{stock} Ask Price')
+                                     market_data['askPrice'],
+                                     label=f'{stock} Ask Price')
             self.plot_lines[line] = f'{stock}_ask'
 
+        if self.prediction_check.isChecked():
+            self.prediction_plotter.plot_predictions(
+                market_data, 
+                stock, 
+                show_predictions=True
+            )
+
+        if self.model_prediction_check.isChecked():
+            try:
+                from Other.model import load_model_and_predict
+                model_predictions = load_model_and_predict(market_data)
+                if model_predictions is not None:
+                    line, = self.ax_price.plot(
+                        market_data['timestamp'],
+                        model_predictions,
+                        color='purple',
+                        linestyle=':',
+                        label=f'{stock} Model Prediction',
+                        alpha=0.7
+                    )
+                    self.prediction_lines[line] = f'{stock}_model_prediction'
+            except ImportError:
+                print("Model prediction module not found")
+
         self._plot_standard_deviation(market_data, stock)
+
 
     def _plot_standard_deviation(self, market_data, stock):
         std_dev_configs = [
@@ -294,7 +312,8 @@ class MarketDataViewer(QMainWindow):
         visibility_map = {
             'bid': self.bid_price_check.isChecked(),
             'ask': self.ask_price_check.isChecked(),
-            'trade': self.trades_check.isChecked()
+            'trade': self.trades_check.isChecked(),
+            'model_prediction': self.model_prediction_check.isChecked()
         }
 
         for line, key in self.plot_lines.items():
@@ -327,6 +346,13 @@ class MarketDataViewer(QMainWindow):
         if self.pnl_check.isChecked():
             # Reload data to switch between percentage and absolute values
             self.load_and_plot_data()
+        
+        for key, line in self.prediction_lines.items():
+            line.set_visible(self.prediction_check.isChecked())
+            if f"{key.split('_')[0]}_confidence" in self.prediction_plotter.confidence_bands:
+                self.prediction_plotter.confidence_bands[f"{key.split('_')[0]}_confidence"].set_visible(
+                    self.prediction_check.isChecked()
+                )
 
         self.canvas.draw()
 

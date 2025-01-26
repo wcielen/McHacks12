@@ -6,6 +6,55 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
 import glob
 import os
+import joblib
+
+
+def save_model(results, output_dir='./models'):
+    """
+    Save trained model and scaler
+    
+    Args:
+        results (dict): Model training results
+        output_dir (str): Directory to save model files
+    """
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Save model
+    model_path = os.path.join(output_dir, 'stock_prediction_model.joblib')
+    joblib.dump(results['model'], model_path)
+    
+    # Save scaler
+    scaler_path = os.path.join(output_dir, 'feature_scaler.joblib')
+    joblib.dump(results['scaler'], scaler_path)
+    
+    print(f"Model saved to: {model_path}")
+    print(f"Scaler saved to: {scaler_path}")
+
+def load_model_and_predict(X, model_path='./models/stock_prediction_model.joblib', 
+                            scaler_path='./models/feature_scaler.joblib'):
+    """
+    Load saved model and scaler, then predict on input data
+    
+    Args:
+        X (pd.DataFrame): Input features to predict
+        model_path (str): Path to saved model
+        scaler_path (str): Path to saved scaler
+    
+    Returns:
+        np.array: Predicted values
+    """
+    # Load model and scaler
+    model = joblib.load(model_path)
+    scaler = joblib.load(scaler_path)
+    
+    # Scale input features
+    X_scaled = scaler.transform(X)
+    
+    # Make predictions
+    predictions = model.predict(X_scaled)
+    
+    return predictions
 
 def load_trading_data(base_path):
     """
@@ -69,6 +118,7 @@ def preprocess_data(market_data, trade_data):
     Returns:
         pd.DataFrame: Merged and feature-engineered dataset
     """
+    
     # Convert timestamp to datetime
     market_data['timestamp'] = pd.to_datetime(market_data['timestamp'], format='%H:%M:%S.%f', errors='coerce')
     trade_data['timestamp'] = pd.to_datetime(trade_data['timestamp'], format='%H:%M:%S.%f', errors='coerce')
@@ -103,6 +153,7 @@ def train_price_prediction_model(merged_data):
     Returns:
         dict: Model, scaler, and performance metrics
     """
+    print("Started training the prediction model")
     # Select features and target
     features = [
         'bidVolume', 'bidPrice', 'askVolume', 'askPrice', 
@@ -111,22 +162,28 @@ def train_price_prediction_model(merged_data):
     X = merged_data[features]
     y = merged_data['next_price']
     
-    # Split data
+    # Split data  
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    
+    print("data split")
     # Scale features
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
+    print("scaled and transformed data")
     
     # Train Random Forest Regressor
-    model = RandomForestRegressor(n_estimators=100, random_state=42)
+    model = RandomForestRegressor(n_estimators=50,  # Reduced from 100
+        n_jobs=-1,        # Use all available cores
+        random_state=42)
+    print("built model")
     model.fit(X_train_scaled, y_train)
-    
+    print("trained model")
+
     # Evaluate model
     y_pred = model.predict(X_test_scaled)
     mse = mean_squared_error(y_test, y_pred)
     rmse = np.sqrt(mse)
+    print("model evaluated")
     
     return {
         'model': model,
@@ -134,28 +191,3 @@ def train_price_prediction_model(merged_data):
         'mse': mse,
         'rmse': rmse
     }
-
-def main(base_path):
-    """
-    Main function to load, preprocess, and train model
-    
-    Args:
-        base_path (str): Base directory for trading data
-    """
-    # Load data
-    market_data, trade_data = load_trading_data(base_path)
-    
-    # Preprocess data
-    merged_data = preprocess_data(market_data, trade_data)
-    
-    # Train model
-    results = train_price_prediction_model(merged_data)
-    
-    print(f"Model Performance:")
-    print(f"Mean Squared Error: {results['mse']}")
-    print(f"Root Mean Squared Error: {results['rmse']}")
-
-# Example usage
-if __name__ == '__main__':
-    base_path = '../TrainingData'
-    main(base_path)
