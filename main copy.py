@@ -3,43 +3,39 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import logging
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
-                             QComboBox, QPushButton, QWidget, QCheckBox, QLabel)
+from PyQt5.QtWidgets import *
+from PyQt5.QtGui import QPalette, QColor
+from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
-import matplotlib
 
-# Set up logging to only log errors
 logging.basicConfig(level=logging.ERROR)
+
+def set_dark_theme(app):
+    app.setStyle("Fusion")
+    palette = QPalette()
+    palette.setColor(QPalette.Window, QColor(53, 53, 53))
+    palette.setColor(QPalette.WindowText, Qt.white)
+    palette.setColor(QPalette.Base, QColor(35, 35, 35))
+    palette.setColor(QPalette.AlternateBase, QColor(53, 53, 53))
+    palette.setColor(QPalette.ToolTipBase, Qt.white)
+    palette.setColor(QPalette.ToolTipText, Qt.white)
+    palette.setColor(QPalette.Text, Qt.white)
+    palette.setColor(QPalette.Button, QColor(53, 53, 53))
+    palette.setColor(QPalette.ButtonText, Qt.white)
+    palette.setColor(QPalette.BrightText, Qt.red)
+    palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
+    palette.setColor(QPalette.HighlightedText, Qt.black)
+    app.setPalette(palette)
 
 class MarketDataViewer(QMainWindow):
     def __init__(self):
         super().__init__()
-
-        # Set dark theme for entire application
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #2b2b2b;
-                color: white;
-            }
-            QComboBox, QComboBox QAbstractItemView {
-                background-color: #3c3f41;
-                color: white;
-                selection-background-color: #4f5b66;
-            }
-            QPushButton {
-                background-color: #3c3f41;
-                color: white;
-                border: 1px solid #555;
-            }
-            QCheckBox {
-                color: white;
-            }
-        """)
-
-        # Get the absolute path of the script's directory
+        
+        # Set dark theme for matplotlib
+        plt.style.use('dark_background')
+        
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
-
         self.setWindowTitle("Market Data Viewer")
         self.setGeometry(100, 100, 1000, 700)
 
@@ -49,102 +45,137 @@ class MarketDataViewer(QMainWindow):
         main_widget.setLayout(main_layout)
         self.setCentralWidget(main_widget)
 
-        # Create controls
+        # Create controls with dark styling
         controls_layout = QHBoxLayout()
         self.period_combo = QComboBox()
-        self.stock_combo = QComboBox()
-        
-        # Remove load button since we'll autoload
+        self.period_combo.setStyleSheet("QComboBox { background-color: #353535; color: white; }")
+        self.load_button = QPushButton("Load Data")
+        self.load_button.setStyleSheet("QPushButton { background-color: #454545; color: white; }")
         controls_layout.addWidget(self.period_combo)
-        controls_layout.addWidget(self.stock_combo)
+        controls_layout.addWidget(self.load_button)
 
-        # Create toggle checkboxes
+        # Stock checkboxes with dark styling
+        self.stock_checkboxes = {}
+        stock_layout = QHBoxLayout()
+        checkbox_style = "QCheckBox { color: white; }"
+        for stock in ['A', 'B', 'C', 'D', 'E']:
+            checkbox = QCheckBox(stock)
+            checkbox.setStyleSheet(checkbox_style)
+            checkbox.setChecked(stock == 'A')
+            self.stock_checkboxes[stock] = checkbox
+            stock_layout.addWidget(checkbox)
+
+        # Toggle checkboxes with dark styling
         toggle_layout = QHBoxLayout()
         self.bid_price_check = QCheckBox("Bid Price")
         self.ask_price_check = QCheckBox("Ask Price")
         self.trades_check = QCheckBox("Trades")
         self.prediction_check = QCheckBox("Price Prediction")
+        self.std_dev_30s_check = QCheckBox("30s Std Dev")
+        self.std_dev_60s_check = QCheckBox("60s Std Dev")
 
-        # Set checkboxes to checked by default
+        for check in [self.bid_price_check, self.ask_price_check, self.trades_check,
+                     self.prediction_check, self.std_dev_30s_check, self.std_dev_60s_check]:
+            check.setStyleSheet(checkbox_style)
+
+        # Set default checked states
         self.bid_price_check.setChecked(True)
         self.ask_price_check.setChecked(True)
         self.trades_check.setChecked(True)
         self.prediction_check.setChecked(True)
 
-        toggle_layout.addWidget(QLabel("Show/Hide:"))
-        toggle_layout.addWidget(self.bid_price_check)
-        toggle_layout.addWidget(self.ask_price_check)
-        toggle_layout.addWidget(self.trades_check)
-        toggle_layout.addWidget(self.prediction_check)
+        label = QLabel("Show/Hide:")
+        label.setStyleSheet("QLabel { color: white; }")
+        toggle_layout.addWidget(label)
+        for check in [self.bid_price_check, self.ask_price_check, self.trades_check,
+                     self.prediction_check, self.std_dev_30s_check, self.std_dev_60s_check]:
+            toggle_layout.addWidget(check)
 
-        # Set dark mode for matplotlib
-        plt.style.use('dark_background')
-        matplotlib.rcParams['axes.facecolor'] = '#2b2b2b'
-        matplotlib.rcParams['figure.facecolor'] = '#2b2b2b'
-        matplotlib.rcParams['text.color'] = 'white'
-        matplotlib.rcParams['axes.labelcolor'] = 'white'
-        matplotlib.rcParams['xtick.color'] = 'white'
-        matplotlib.rcParams['ytick.color'] = 'white'
-
-        # Create matplotlib figure and canvas
-        self.figure, self.ax = plt.subplots(figsize=(10, 7), facecolor='#2b2b2b')
-        self.ax.set_facecolor('#2b2b2b')
+        # Create matplotlib figure with dark theme
+        self.figure, self.ax = plt.subplots(figsize=(10, 7))
+        self.figure.patch.set_facecolor('#353535')
+        self.ax.set_facecolor('#353535')
         self.canvas = FigureCanvas(self.figure)
 
-        # Add navigation toolbar with all tools enabled
+        # Add navigation toolbar with dark theme
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
+        self.toolbar.setStyleSheet("QToolBar { background-color: #353535; color: white; }")
 
         # Add widgets to main layout
         main_layout.addLayout(controls_layout)
+        main_layout.addLayout(stock_layout)
         main_layout.addLayout(toggle_layout)
         main_layout.addWidget(self.toolbar)
         main_layout.addWidget(self.canvas)
 
-        # Store plot lines and scatter for toggling
-        self.bid_line = None
-        self.ask_line = None
-        self.trade_line = None
-        self.prediction_line = None
+        # Store plot elements
+        self.plot_lines = {}
+        self.std_dev_fills = {}
+        self.prediction_lines = {}
 
         # Connect signals
-        self.period_combo.currentIndexChanged.connect(self.load_and_plot_data)
-        self.stock_combo.currentIndexChanged.connect(self.load_and_plot_data)
-        self.bid_price_check.stateChanged.connect(self.toggle_bid_price)
-        self.ask_price_check.stateChanged.connect(self.toggle_ask_price)
-        self.trades_check.stateChanged.connect(self.toggle_trades)
-        self.prediction_check.stateChanged.connect(self.toggle_prediction)
+        self.load_button.clicked.connect(self.load_and_plot_data)
+        for check in [self.bid_price_check, self.ask_price_check, self.trades_check,
+                     self.prediction_check, self.std_dev_30s_check, self.std_dev_60s_check]:
+            check.stateChanged.connect(self.update_plot_visibility)
 
-        # Initialize combo boxes
-        self.initialize_combos()
-
-        # Automatically load data when app starts
-        self.load_and_plot_data()
-
-    def initialize_combos(self):
-        # Populate period combo box
+        # Initialize period combo box
         for i in range(1, 16):
             self.period_combo.addItem(f"Period{i}")
-
-        # Populate stock combo box
-        for stock in ['A', 'B', 'C', 'D', 'E']:
-            self.stock_combo.addItem(stock)
+        self.period_combo.setCurrentText("Period1")
 
     def load_and_plot_data(self):
-        # Get selected period and stock
         period = self.period_combo.currentText()
-        stock = self.stock_combo.currentText()
+        selected_stocks = [stock for stock, checkbox in self.stock_checkboxes.items() if checkbox.isChecked()]
 
-        # Construct full path to data directory
-        data_dir = os.path.join(self.base_dir, 'TrainingData', period, stock)
+        self.ax.clear()
+        self.plot_lines.clear()
+        self.std_dev_fills.clear()
+        self.prediction_lines.clear()
 
-        # Load market data
-        market_data = self.load_market_data(data_dir, stock)
+        # Set dark theme colors for plot
+        self.ax.set_facecolor('#353535')
+        self.ax.tick_params(colors='white')
+        self.ax.xaxis.label.set_color('white')
+        self.ax.yaxis.label.set_color('white')
+        self.ax.title.set_color('white')
+        self.ax.spines['bottom'].set_color('white')
+        self.ax.spines['top'].set_color('white')
+        self.ax.spines['left'].set_color('white')
+        self.ax.spines['right'].set_color('white')
 
-        # Load trade data
-        trade_data = self.load_trade_data(data_dir, stock)
+        for stock in selected_stocks:
+            data_dir = os.path.join(self.base_dir, 'TrainingData', period, stock)
+            market_data = self.load_market_data(data_dir, stock)
+            trade_data = self.load_trade_data(data_dir, stock)
 
-        # Plot data
-        self.plot_data(market_data, trade_data)
+            if market_data is not None:
+                self.plot_market_data(market_data, stock)
+
+                if self.prediction_check.isChecked():
+                    prediction_data = self.predict_price_changes(market_data)
+                    if prediction_data is not None and not prediction_data.empty:
+                        prediction_line, = self.ax.plot(prediction_data['timestamp'],
+                                                      prediction_data['predicted_price'],
+                                                      color='#FFA500',  # Bright orange for visibility
+                                                      linestyle='--',
+                                                      label=f'{stock} Predicted Price',
+                                                      alpha=0.7)
+                        self.prediction_lines[f'{stock}_prediction'] = prediction_line
+
+            if trade_data is not None:
+                self.plot_trade_data(trade_data, stock)
+
+        self.ax.set_xlabel('Time')
+        self.ax.set_ylabel('Price')
+        self.ax.set_title(f"{period} - Selected Stocks")
+
+        if len(self.ax.get_lines()) > 0 or len(self.ax.collections) > 0:
+            legend = self.ax.legend()
+            plt.setp(legend.get_texts(), color='white')
+
+        plt.tight_layout()
+        self.canvas.draw()
 
     def load_market_data(self, data_dir, stock):
         all_data = []
@@ -175,152 +206,130 @@ class MarketDataViewer(QMainWindow):
             logging.error(f"Trade data file not found: {file_path}")
             return None
 
-    def plot_data(self, market_data, trade_data):
-        # Clear previous plot
-        self.ax.clear()
+    def plot_market_data(self, market_data, stock):
+        try:
+            market_data['timestamp'] = pd.to_datetime(market_data['timestamp'], format='%H:%M:%S.%f')
 
-        # Plot market data
-        if market_data is not None and not market_data.empty:
-            try:
-                market_data['timestamp'] = pd.to_datetime(market_data['timestamp'], format='%H:%M:%S.%f')
+            # Plot with dark theme colors
+            if self.bid_price_check.isChecked():
+                bid_line, = self.ax.plot(market_data['timestamp'], market_data['bidPrice'],
+                                       color='#00FF00',  # Bright green for visibility
+                                       label=f'{stock} Bid Price')
+                self.plot_lines[f'{stock}_bid'] = bid_line
 
-                # Plot bid price line
-                self.bid_line, = self.ax.plot(market_data['timestamp'], market_data['bidPrice'],
-                                              label='Bid Price', visible=self.bid_price_check.isChecked())
+            if self.ask_price_check.isChecked():
+                ask_line, = self.ax.plot(market_data['timestamp'], market_data['askPrice'],
+                                       color='#FF69B4',  # Pink for visibility
+                                       label=f'{stock} Ask Price')
+                self.plot_lines[f'{stock}_ask'] = ask_line
 
-                # Plot ask price line
-                self.ask_line, = self.ax.plot(market_data['timestamp'], market_data['askPrice'],
-                                              label='Ask Price', visible=self.ask_price_check.isChecked())
-            except Exception as e:
-                logging.error(f"Error plotting market data: {e}")
+            if self.std_dev_30s_check.isChecked():
+                window_size = int(30 * 1000)
+                std_dev_30s = market_data['bidPrice'].rolling(window=window_size, min_periods=1).std()
+                lower_bound = market_data['bidPrice'] - std_dev_30s
+                upper_bound = market_data['bidPrice'] + std_dev_30s
 
-        # Plot trade data (with only the trade line in green)
-        if trade_data is not None and not trade_data.empty:
-            try:
-                trade_data['timestamp'] = pd.to_datetime(trade_data['timestamp'], format='%H:%M:%S.%f')
+                std_dev_30s_fill = self.ax.fill_between(market_data['timestamp'],
+                                                      lower_bound.clip(lower=None, upper=upper_bound),
+                                                      upper_bound.clip(lower=lower_bound, upper=None),
+                                                      alpha=0.2, color='#4169E1',  # Royal blue
+                                                      label=f'{stock} 30s Std Dev')
+                self.std_dev_fills[f'{stock}_30s'] = std_dev_30s_fill
 
-                # Create a solid green line for trades
-                self.trade_line, = self.ax.plot(trade_data['timestamp'], trade_data['price'],
-                                                color='green', linestyle='-',
-                                                alpha=0.7, label='Trade Line',
-                                                visible=self.trades_check.isChecked())
-            except Exception as e:
-                logging.error(f"Error plotting trade data: {e}")
+            if self.std_dev_60s_check.isChecked():
+                window_size = int(60 * 1000)
+                std_dev_60s = market_data['bidPrice'].rolling(window=window_size, min_periods=1).std()
+                lower_bound = market_data['bidPrice'] - std_dev_60s
+                upper_bound = market_data['bidPrice'] + std_dev_60s
 
-        # Plot price prediction if checkbox is checked
-        if self.prediction_check.isChecked():
-            prediction_data = self.predict_price_changes(market_data)
-            if prediction_data is not None and not prediction_data.empty:
-                self.prediction_line, = self.ax.plot(prediction_data['timestamp'], prediction_data['predicted_price'],
-                                                     color='orange', linestyle='--', label='Predicted Price',
-                                                     visible=self.prediction_check.isChecked())
+                std_dev_60s_fill = self.ax.fill_between(market_data['timestamp'],
+                                                      lower_bound.clip(lower=None, upper=upper_bound),
+                                                      upper_bound.clip(lower=lower_bound, upper=None),
+                                                      alpha=0.2, color='#DC143C',  # Crimson
+                                                      label=f'{stock} 60s Std Dev')
+                self.std_dev_fills[f'{stock}_60s'] = std_dev_60s_fill
 
-        # Set labels and title
-        self.ax.set_xlabel('Time', color='white')
-        self.ax.set_ylabel('Price', color='white')
+        except Exception as e:
+            logging.error(f"Error plotting market data for stock {stock}: {e}")
 
-        # Only add legend if there are artists
-        if len(self.ax.get_lines()) > 0 or len(self.ax.collections) > 0:
-            legend = self.ax.legend()
-            for text in legend.get_texts():
-                text.set_color('white')
+    def plot_trade_data(self, trade_data, stock):
+        try:
+            trade_data['timestamp'] = pd.to_datetime(trade_data['timestamp'], format='%H:%M:%S.%f')
 
-        self.ax.set_title(f"{self.period_combo.currentText()} - Stock {self.stock_combo.currentText()}", color='white')
+            if self.trades_check.isChecked():
+                trade_line, = self.ax.plot(trade_data['timestamp'], trade_data['price'],
+                                         color='#FFD700',  # Gold
+                                         linestyle='-', marker='',
+                                         label=f'{stock} Trade Price', alpha=0.7)
+                self.plot_lines[f'{stock}_trade'] = trade_line
 
-        # Enable tight layout and auto-adjust
-        plt.tight_layout()
-        self.canvas.draw()
+        except Exception as e:
+            logging.error(f"Error plotting trade data for stock {stock}: {e}")
 
-    def toggle_bid_price(self):
-        if self.bid_line:
-            self.bid_line.set_visible(self.bid_price_check.isChecked())
-            self.canvas.draw()
+    def update_plot_visibility(self):
+        for key, line in self.plot_lines.items():
+            if 'bid' in key:
+                line.set_visible(self.bid_price_check.isChecked())
+            elif 'ask' in key:
+                line.set_visible(self.ask_price_check.isChecked())
+            elif 'trade' in key:
+                line.set_visible(self.trades_check.isChecked())
 
-    def toggle_ask_price(self):
-        if self.ask_line:
-            self.ask_line.set_visible(self.ask_price_check.isChecked())
-            self.canvas.draw()
+        for key, fill in self.std_dev_fills.items():
+            if '30s' in key:
+                fill.set_visible(self.std_dev_30s_check.isChecked())
+            elif '60s' in key:
+                fill.set_visible(self.std_dev_60s_check.isChecked())
 
-    def toggle_trades(self):
-        if self.trade_line:
-            self.trade_line.set_visible(self.trades_check.isChecked())
-        self.canvas.draw()
+        for key, line in self.prediction_lines.items():
+            line.set_visible(self.prediction_check.isChecked())
 
-    def toggle_prediction(self):
-        if self.prediction_line:
-            self.prediction_line.set_visible(self.prediction_check.isChecked())
         self.canvas.draw()
 
     def predict_price_changes(self, market_data):
-        """
-        Predict potential price changes using advanced statistical methods
-
-        Strategy:
-        1. Use exponential moving average for trend detection
-        2. Calculate volatility using standard deviation
-        3. Use momentum and trend to predict potential price changes
-        4. Look ahead to identify potential significant movements
-        """
         if market_data is None or market_data.empty:
             return None
 
-        # Convert timestamp to datetime
         market_data['timestamp'] = pd.to_datetime(market_data['timestamp'], format='%H:%M:%S.%f')
-
-        # Sort by timestamp to ensure correct calculations
         market_data = market_data.sort_values('timestamp')
 
-        # Calculate exponential moving averages with different windows
         market_data['ema_short'] = market_data['bidPrice'].ewm(span=10, adjust=False).mean()
         market_data['ema_long'] = market_data['bidPrice'].ewm(span=30, adjust=False).mean()
-
-        # Calculate price momentum
         market_data['momentum'] = market_data['bidPrice'].diff(periods=10)
-
-        # Calculate volatility
         market_data['volatility'] = market_data['bidPrice'].rolling(window=20).std()
 
-        # Predict potential significant changes
         market_data['trend_change'] = (
                 (market_data['ema_short'] > market_data['ema_long']) &
                 (market_data['momentum'].abs() > market_data['volatility'])
         )
 
-        # Look ahead prediction
-        prediction_window = 5  # Number of future points to project
-
-        # Create a DataFrame to store predictions
+        prediction_window = 5
         predictions = []
 
         for i in range(len(market_data)):
-            if market_data.loc[i, 'trend_change']:
-                # Predict potential future points
+            if market_data.iloc[i]['trend_change']:
                 if i + prediction_window < len(market_data):
-                    future_timestamps = market_data.loc[i + 1:i + prediction_window, 'timestamp']
-
-                    # Linear extrapolation based on current momentum
-                    momentum = market_data.loc[i, 'momentum']
-                    start_price = market_data.loc[i, 'bidPrice']
+                    future_timestamps = market_data.iloc[i + 1:i + prediction_window + 1]['timestamp']
+                    momentum = market_data.iloc[i]['momentum']
+                    start_price = market_data.iloc[i]['bidPrice']
 
                     future_prices = [start_price + momentum * (j + 1) for j in range(prediction_window)]
 
-                    # Create prediction points
                     for timestamp, price in zip(future_timestamps, future_prices):
                         predictions.append({
                             'timestamp': timestamp,
                             'predicted_price': price
                         })
 
-        # Convert predictions to DataFrame
         if predictions:
             prediction_df = pd.DataFrame(predictions)
             return prediction_df
 
         return None
 
-
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+    set_dark_theme(app)
     viewer = MarketDataViewer()
     viewer.show()
     sys.exit(app.exec_())
