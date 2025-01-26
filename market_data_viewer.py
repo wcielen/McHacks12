@@ -37,7 +37,7 @@ class MarketDataViewer(QMainWindow):
         self._connect_signals()
 
     def _setup_ui(self):
-        self.setWindowTitle("Market Data Viewer")
+        self.setWindowTitle("Stock Overflow")
         self.setGeometry(100, 100, 1200, 900)  # Increased height for PNL graph
 
         main_widget = QWidget()
@@ -131,7 +131,8 @@ class MarketDataViewer(QMainWindow):
                 stock, 
                 show_predictions=True
             )
-
+        self._plot_standard_deviation(market_data, stock)
+    """
         if self.model_prediction_check.isChecked():
             try:
                 from Other.model import load_model_and_predict
@@ -148,8 +149,9 @@ class MarketDataViewer(QMainWindow):
                     self.prediction_lines[line] = f'{stock}_model_prediction'
             except ImportError:
                 print("Model prediction module not found")
+        """
 
-        self._plot_standard_deviation(market_data, stock)
+        
 
 
     def _plot_standard_deviation(self, market_data, stock):

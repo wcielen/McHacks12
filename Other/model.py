@@ -31,30 +31,34 @@ def save_model(results, output_dir='./models'):
     print(f"Model saved to: {model_path}")
     print(f"Scaler saved to: {scaler_path}")
 
-def load_model_and_predict(X, model_path='./models/stock_prediction_model.joblib', 
-                            scaler_path='./models/feature_scaler.joblib'):
-    """
-    Load saved model and scaler, then predict on input data
-    
-    Args:
-        X (pd.DataFrame): Input features to predict
-        model_path (str): Path to saved model
-        scaler_path (str): Path to saved scaler
-    
-    Returns:
-        np.array: Predicted values
-    """
-    # Load model and scaler
-    model = joblib.load(model_path)
-    scaler = joblib.load(scaler_path)
-    
-    # Scale input features
-    X_scaled = scaler.transform(X)
-    
-    # Make predictions
-    predictions = model.predict(X_scaled)
-    
-    return predictions
+def load_model_and_predict(market_data):
+    """Load saved model and predict on market data"""
+    try:
+        # Load model and scaler
+        model = joblib.load('./models/stock_prediction_model.joblib')
+        scaler = joblib.load('./models/feature_scaler.joblib')
+        
+        # Prepare features like in training
+        X = pd.DataFrame()
+        X['bidVolume'] = market_data['bidVolume']
+        X['bidPrice'] = market_data['bidPrice'] 
+        X['askVolume'] = market_data['askVolume']
+        X['askPrice'] = market_data['askPrice']
+        X['price'] = (market_data['bidPrice'] + market_data['askPrice']) / 2  # Mid price
+        X['volume'] = market_data['bidVolume'] + market_data['askVolume']  # Total volume
+        X['bid_ask_spread'] = market_data['askPrice'] - market_data['bidPrice']
+        X['volume_imbalance'] = market_data['bidVolume'] - market_data['askVolume']
+        
+        # Scale features
+        X_scaled = scaler.transform(X)
+        
+        # Make predictions
+        predictions = model.predict(X_scaled)
+        
+        return predictions
+        
+    except Exception as e:
+        print(f"Error in prediction: {str(e)}")
 
 def load_trading_data(base_path):
     """
