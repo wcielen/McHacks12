@@ -70,8 +70,8 @@ def preprocess_data(market_data, trade_data):
         pd.DataFrame: Merged and feature-engineered dataset
     """
     # Convert timestamp to datetime
-    market_data['timestamp'] = pd.to_datetime(market_data['timestamp'])
-    trade_data['timestamp'] = pd.to_datetime(trade_data['timestamp'])
+    market_data['timestamp'] = pd.to_datetime(market_data['timestamp'], format='%H:%M:%S.%f', errors='coerce')
+    trade_data['timestamp'] = pd.to_datetime(trade_data['timestamp'], format='%H:%M:%S.%f', errors='coerce')
     
     # Merge data based on timestamp
     merged_data = pd.merge_asof(
