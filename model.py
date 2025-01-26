@@ -21,7 +21,7 @@ def load_trading_data(base_path):
     all_trade_data = []
     
     # Updated glob pattern to match your specific directory structure
-    for period in range(1, 10):  # Periods 1-9
+    for period in range(1, 16):  # Periods 1-15
         for location in ['A', 'B', 'C', 'D', 'E']:
             market_pattern = os.path.join(base_path, f'Period{period}', location, f'market_data_{location}.csv')
             trade_pattern = os.path.join(base_path, f'Period{period}', location, f'trade_data_{location}.csv')
