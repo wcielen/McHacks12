@@ -1,245 +1,197 @@
-import sys
 import os
-import pandas as pd
-import matplotlib.pyplot as plt
-import logging
-from PyQt5.QtWidgets import *
-from PyQt5.QtGui import QPalette, QColor
-from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout,
+                             QComboBox, QPushButton, QWidget, QCheckBox, QLabel)
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
-
-logging.basicConfig(level=logging.ERROR)
-
-
-def set_dark_theme(app):
-    # Dark theme setup remains the same
-    app.setStyle("Fusion")
-    dark_palette = QPalette()
-    dark_palette.setColor(QPalette.Window, QColor(53, 53, 53))
-    dark_palette.setColor(QPalette.WindowText, Qt.white)
-    dark_palette.setColor(QPalette.Base, QColor(35, 35, 35))
-    dark_palette.setColor(QPalette.AlternateBase, QColor(53, 53, 53))
-    dark_palette.setColor(QPalette.ToolTipBase, Qt.white)
-    dark_palette.setColor(QPalette.ToolTipText, Qt.white)
-    dark_palette.setColor(QPalette.Text, Qt.white)
-    dark_palette.setColor(QPalette.Button, QColor(53, 53, 53))
-    dark_palette.setColor(QPalette.ButtonText, Qt.white)
-    dark_palette.setColor(QPalette.BrightText, Qt.red)
-    dark_palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
-    dark_palette.setColor(QPalette.HighlightedText, Qt.black)
-    app.setPalette(dark_palette)
-
+import matplotlib.pyplot as plt
+from data_loader import load_market_data, load_trade_data
+from price_prediction import predict_price_changes
+import pandas as pd
 
 class MarketDataViewer(QMainWindow):
+    STOCKS = ['A', 'B', 'C', 'D', 'E']
+    VISUALIZATION_TOGGLES = [
+        ('bid_price_check', "Bid Price", True),
+        ('ask_price_check', "Ask Price", True),
+        ('trades_check', "Trades", True),
+        ('prediction_check', "Price Prediction", True),
+        ('std_dev_30s_check', "30s Std Dev", False),
+        ('std_dev_60s_check', "60s Std Dev", False)
+    ]
+
     def __init__(self):
         super().__init__()
-        self.init_ui()
-        self.setup_plot()
-        self.connect_signals()
 
-    def init_ui(self):
-        # UI setup remains largely the same
+        self.base_dir = os.path.dirname(os.path.abspath(__file__))
+
         self.setWindowTitle("Market Data Viewer")
         self.setGeometry(100, 100, 1000, 700)
 
         main_widget = QWidget()
+        main_layout = QVBoxLayout()
+        main_widget.setLayout(main_layout)
         self.setCentralWidget(main_widget)
-        layout = QVBoxLayout(main_widget)
 
-        # Controls
-        controls = QHBoxLayout()
+        controls_layout = QHBoxLayout()
         self.period_combo = QComboBox()
-        self.period_combo.setStyleSheet("background-color: #353535; color: white;")
-        self.period_combo.addItems([f"Period{i}" for i in range(1, 16)])
-
         self.load_button = QPushButton("Load Data")
-        self.load_button.setStyleSheet("background-color: #454545; color: white;")
+        controls_layout.addWidget(self.period_combo)
+        controls_layout.addWidget(self.load_button)
 
-        controls.addWidget(self.period_combo)
-        controls.addWidget(self.load_button)
+        self.stock_checkboxes = self._setup_stock_checkboxes()
+        stock_layout = QHBoxLayout()
+        for stock, checkbox in self.stock_checkboxes.items():
+            stock_layout.addWidget(checkbox)
 
-        # Stock selection
-        stocks = QHBoxLayout()
-        self.stock_checks = {}
-        for stock in ['A', 'B', 'C', 'D', 'E']:
-            cb = QCheckBox(stock)
-            cb.setStyleSheet("color: white;")
-            cb.setChecked(stock == 'A')
-            self.stock_checks[stock] = cb
-            stocks.addWidget(cb)
+        toggle_layout = QHBoxLayout()
+        self._setup_visualization_toggles(toggle_layout)
 
-        # Plot controls
-        plot_controls = QHBoxLayout()
-        plot_controls.addWidget(QLabel("Show/Hide:"))
-
-        self.vis_checks = {
-            'bid': QCheckBox("Bid Price"),
-            'ask': QCheckBox("Ask Price"),
-            'trades': QCheckBox("Trades"),
-            'std30': QCheckBox("30s Std Dev"),
-            'std60': QCheckBox("60s Std Dev")
-        }
-
-        for name, cb in self.vis_checks.items():
-            cb.setStyleSheet("color: white;")
-            cb.setChecked(name not in ['std30', 'std60'])
-            plot_controls.addWidget(cb)
-
-        layout.addLayout(controls)
-        layout.addLayout(stocks)
-        layout.addLayout(plot_controls)
-
-    def setup_plot(self):
-        plt.style.use('dark_background')
         self.figure, self.ax = plt.subplots(figsize=(10, 7))
-        self.figure.patch.set_facecolor('#353535')
-        self.ax.set_facecolor('#353535')
-
         self.canvas = FigureCanvas(self.figure)
+
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
-        self.toolbar.setStyleSheet("background-color: #353535; color: white;")
 
-        self.centralWidget().layout().addWidget(self.toolbar)
-        self.centralWidget().layout().addWidget(self.canvas)
+        main_layout.addLayout(controls_layout)
+        main_layout.addLayout(stock_layout)
+        main_layout.addLayout(toggle_layout)
+        main_layout.addWidget(self.toolbar)
+        main_layout.addWidget(self.canvas)
 
-        self.plot_elements = {
-            'lines': {},
-            'fills': {},
-            'daily_lines': {}
-        }
+        self.plot_lines = {}
+        self.std_dev_fills = {}
+        self.prediction_lines = {}
 
-    def connect_signals(self):
-        self.load_button.clicked.connect(self.update_plot)
-        for cb in self.vis_checks.values():
-            cb.stateChanged.connect(self.update_visibility)
+        self.load_button.clicked.connect(self.load_and_plot_data)
 
-    def load_market_data(self, file_path):
-        try:
-            # Read data in chunks to handle large files
-            chunks = []
-            for chunk in pd.read_csv(file_path, chunksize=10000):
-                chunks.append(chunk)
-            data = pd.concat(chunks, ignore_index=True)
+        for toggle_attr, _, _ in self.VISUALIZATION_TOGGLES:
+            getattr(self, toggle_attr).stateChanged.connect(self.update_plot_visibility)
 
-            # Convert timestamp using a specific format
-            data['timestamp'] = pd.to_datetime(data['timestamp'], format='%H:%M:%S.%f')
-            return data
-        except Exception as e:
-            logging.error(f"Error loading market data: {str(e)}")
-            return None
+        for i in range(1, 16):
+            self.period_combo.addItem(f"Period{i}")
+        self.period_combo.setCurrentText("Period1")
 
-    def update_plot(self):
-        self.ax.clear()
-        for elements in self.plot_elements.values():
-            elements.clear()
+    def _setup_stock_checkboxes(self):
+        stock_checkboxes = {}
+        for stock in self.STOCKS:
+            checkbox = QCheckBox(stock)
+            checkbox.setChecked(stock == 'A')
+            stock_checkboxes[stock] = checkbox
+        return stock_checkboxes
 
-        # Setup dark theme for plot
-        self.ax.set_facecolor('#353535')
-        self.ax.tick_params(colors='white')
-        for item in [self.ax.xaxis.label, self.ax.yaxis.label, self.ax.title]:
-            item.set_color('white')
-        for spine in self.ax.spines.values():
-            spine.set_color('white')
+    def _setup_visualization_toggles(self, toggle_layout):
+        toggle_layout.addWidget(QLabel("Show/Hide:"))
+        for toggle_attr, label, default_state in self.VISUALIZATION_TOGGLES:
+            checkbox = QCheckBox(label)
+            checkbox.setChecked(default_state)
+            setattr(self, toggle_attr, checkbox)
+            toggle_layout.addWidget(checkbox)
 
+    def load_and_plot_data(self):
         period = self.period_combo.currentText()
-        selected_stocks = [s for s, cb in self.stock_checks.items() if cb.isChecked()]
+
+        selected_stocks = [stock for stock, checkbox in self.stock_checkboxes.items() if checkbox.isChecked()]
+
+        self.ax.clear()
+        self.plot_lines.clear()
+        self.std_dev_fills.clear()
+        self.prediction_lines.clear()
 
         for stock in selected_stocks:
-            self.plot_stock_data(stock, period)
+            data_dir = os.path.join(self.base_dir, 'TrainingData', period, stock)
+            market_data = load_market_data(data_dir, stock)
+            trade_data = load_trade_data(data_dir, stock)
+
+            if market_data is not None:
+                self.plot_market_data(market_data, stock)
+
+                if self.prediction_check.isChecked():
+                    prediction_data = predict_price_changes(market_data)
+                    if prediction_data is not None and not prediction_data.empty:
+                        prediction_line, = self.ax.plot(prediction_data['timestamp'],
+                                                        prediction_data['predicted_price'],
+                                                        color='orange', linestyle='--',
+                                                        label=f'{stock} Predicted Price', alpha=0.7)
+                        self.prediction_lines[f'{stock}_prediction'] = prediction_line
+
+            if trade_data is not None:
+                self.plot_trade_data(trade_data, stock)
 
         self.ax.set_xlabel('Time')
         self.ax.set_ylabel('Price')
         self.ax.set_title(f"{period} - Selected Stocks")
 
-        if self.ax.get_lines() or self.ax.collections:
-            legend = self.ax.legend()
-            plt.setp(legend.get_texts(), color='white')
+        if len(self.ax.get_lines()) > 0 or len(self.ax.collections) > 0:
+            self.ax.legend()
 
         plt.tight_layout()
         self.canvas.draw()
 
-    def plot_stock_data(self, stock, period):
-        data_dir = os.path.join(os.path.dirname(__file__), 'TrainingData', period, stock)
+    def plot_market_data(self, market_data, stock):
+        market_data['timestamp'] = pd.to_datetime(market_data['timestamp'], format='%H:%M:%S.%f')
 
-        # Load market data
-        market_data_path = os.path.join(data_dir, f'market_data_{stock}.csv')
-        market_data = self.load_market_data(market_data_path)
+        plot_conditions = [
+            (self.bid_price_check, 'bidPrice', f'{stock} Bid Price'),
+            (self.ask_price_check, 'askPrice', f'{stock} Ask Price')
+        ]
 
-        if market_data is not None:
-            # Plot market data
-            if self.vis_checks['bid'].isChecked():
-                self.plot_elements['lines'][f'{stock}_bid'] = self.ax.plot(
-                    market_data['timestamp'], market_data['bidPrice'],
-                    color='#00FF00', label=f'{stock} Bid'
-                )[0]
+        for checkbox, price_column, label in plot_conditions:
+            if checkbox.isChecked():
+                bid_line, = self.ax.plot(market_data['timestamp'], market_data[price_column],
+                                            label=label)
+                self.plot_lines[f'{stock}_{label.split()[-1].lower()}'] = bid_line
 
-            if self.vis_checks['ask'].isChecked():
-                self.plot_elements['lines'][f'{stock}_ask'] = self.ax.plot(
-                    market_data['timestamp'], market_data['askPrice'],
-                    color='#FF69B4', label=f'{stock} Ask'
-                )[0]
+        self._plot_standard_deviation(market_data, stock)
 
-            # Daily high/low lines
-            high = market_data['bidPrice'].max()
-            low = market_data['bidPrice'].min()
-            self.plot_elements['daily_lines'][f'{stock}_high'] = self.ax.axhline(
-                y=high, color='#00FF00', linestyle=':', alpha=0.8,
-                label=f'{stock} Daily High'
-            )
-            self.plot_elements['daily_lines'][f'{stock}_low'] = self.ax.axhline(
-                y=low, color='#FF0000', linestyle=':', alpha=0.8,
-                label=f'{stock} Daily Low'
-            )
+    def _plot_standard_deviation(self, market_data, stock):
+        std_dev_configs = [
+            (self.std_dev_30s_check, 30, 'blue', f'{stock} 30s Std Dev'),
+            (self.std_dev_60s_check, 60, 'red', f'{stock} 60s Std Dev')
+        ]
 
-            # Standard deviations
-            if self.vis_checks['std30'].isChecked():
-                self.plot_std_dev(market_data, stock, 30, '#4169E1')
-            if self.vis_checks['std60'].isChecked():
-                self.plot_std_dev(market_data, stock, 60, '#DC143C')
+        for checkbox, window_seconds, color, label in std_dev_configs:
+            if checkbox.isChecked():
+                window_size = int(window_seconds * 1000)
+                std_dev = market_data['bidPrice'].rolling(window=window_size, min_periods=1).std()
 
-        # Load and plot trades
-        try:
-            trade_data_path = os.path.join(data_dir, f'trade_data_{stock}.csv')
-            trade_data = self.load_market_data(trade_data_path)
+                lower_bound = market_data['bidPrice'] - std_dev
+                upper_bound = market_data['bidPrice'] + std_dev
 
-            if trade_data is not None and self.vis_checks['trades'].isChecked():
-                self.plot_elements['lines'][f'{stock}_trades'] = self.ax.plot(
-                    trade_data['timestamp'], trade_data['price'],
-                    color='#FFD700', alpha=0.7, label=f'{stock} Trades'
-                )[0]
-        except Exception as e:
-            logging.error(f"Error loading trade data: {str(e)}")
+                std_dev_fill = self.ax.fill_between(market_data['timestamp'],
+                                                    lower_bound.clip(lower=None, upper=upper_bound),
+                                                    upper_bound.clip(lower=lower_bound, upper=None),
+                                                    alpha=0.2, color=color, label=label)
+                self.std_dev_fills[f'{stock}_{window_seconds}s'] = std_dev_fill
 
-    def plot_std_dev(self, data, stock, window, color):
-        window_ms = window * 1000
-        std = data['bidPrice'].rolling(window=window_ms, min_periods=1).std()
-        center = data['bidPrice']
-        self.plot_elements['fills'][f'{stock}_std{window}'] = self.ax.fill_between(
-            data['timestamp'],
-            center - std, center + std,
-            color=color, alpha=0.2, label=f'{stock} {window}s Std Dev'
-        )
+    def plot_trade_data(self, trade_data, stock):
+        trade_data['timestamp'] = pd.to_datetime(trade_data['timestamp'], format='%H:%M:%S.%f')
 
-    def update_visibility(self):
-        # Update visibility of plot elements based on checkboxes
-        visibility = {
-            'bid': self.vis_checks['bid'].isChecked(),
-            'ask': self.vis_checks['ask'].isChecked(),
-            'trades': self.vis_checks['trades'].isChecked()
+        if self.trades_check.isChecked():
+            trade_line, = self.ax.plot(trade_data['timestamp'], trade_data['price'],
+                                        linestyle='-', marker='',
+                                        label=f'{stock} Trade Price', alpha=0.7)
+            self.plot_lines[f'{stock}_trade'] = trade_line
+
+    def update_plot_visibility(self):
+        visibility_map = {
+            'bid': self.bid_price_check.isChecked(),
+            'ask': self.ask_price_check.isChecked(),
+            'trade': self.trades_check.isChecked()
         }
 
-        for key, line in self.plot_elements['lines'].items():
-            line.set_visible(any(k in key and visibility[k] for k in visibility))
+        for key, line in self.plot_lines.items():
+            line.set_visible(any(vis_type in key for vis_type in visibility_map
+                                    if visibility_map[vis_type]))
 
-        for key, fill in self.plot_elements['fills'].items():
-            if '30' in key:
-                fill.set_visible(self.vis_checks['std30'].isChecked())
-            elif '60' in key:
-                fill.set_visible(self.vis_checks['std60'].isChecked())
+        std_dev_visibility = {
+            '30s': self.std_dev_30s_check.isChecked(),
+            '60s': self.std_dev_60s_check.isChecked()
+        }
 
-        # Daily lines always visible
-        for line in self.plot_elements['daily_lines'].values():
-            line.set_visible(True)
+        for key, fill in self.std_dev_fills.items():
+            fill.set_visible(any(dev_type in key for dev_type in std_dev_visibility
+                                    if std_dev_visibility[dev_type]))
+
+        for key, line in self.prediction_lines.items():
+            line.set_visible(self.prediction_check.isChecked())
 
         self.canvas.draw()
