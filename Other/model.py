@@ -191,29 +191,3 @@ def train_price_prediction_model(merged_data):
         'mse': mse,
         'rmse': rmse
     }
-
-def main(base_path):
-    """
-    Main function to load, preprocess, and train model
-    
-    Args:
-        base_path (str): Base directory for trading data
-    """
-    # Load data
-    market_data, trade_data = load_trading_data(base_path)
-    
-    # Preprocess data
-    merged_data = preprocess_data(market_data, trade_data)
-    
-    # Train model
-    results = train_price_prediction_model(merged_data)
-    save_model(results)
-    
-    print(f"Model Performance:")
-    print(f"Mean Squared Error: {results['mse']}")
-    print(f"Root Mean Squared Error: {results['rmse']}")
-
-# Example usage
-if __name__ == '__main__':
-    base_path = '../TrainingData'
-    main(base_path)
