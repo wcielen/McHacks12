@@ -10,6 +10,8 @@ import pandas as pd
 from typing import Dict, Optional
 import gc
 
+from trading_strategy import TradingStrategy, calculate_trading_metrics
+
 
 class MarketDataViewer(QMainWindow):
     STOCKS = ['A', 'B', 'C', 'D', 'E']
@@ -190,19 +192,39 @@ class MarketDataViewer(QMainWindow):
         if not self.pnl_check.isChecked() or market_data is None:
             return
 
-        initial_price = market_data['bidPrice'].iloc[0]
-        position_size = self.INITIAL_INVESTMENT / initial_price
+        # Initialize trading strategy
+        strategy = TradingStrategy()
 
+        # Calculate PnL using the new strategy
+        pnl_data = strategy.calculate_pnl(market_data)
+
+        # Calculate trading metrics
+        metrics = calculate_trading_metrics(pnl_data)
+
+        # Plot PnL
         if self.pnl_percent_check.isChecked():
-            pnl = (market_data['bidPrice'] / initial_price - 1) * 100
-            ylabel = 'PNL (%)'
+            line, = self.ax_pnl.plot(
+                pnl_data['timestamp'],
+                pnl_data['pnl_percentage'],
+                label=f'{stock} PnL % (Sharpe: {metrics["sharpe_ratio"]:.2f}, Win: {metrics["win_rate"]:.1f}%)'
+            )
+            ylabel = 'PnL (%)'
         else:
-            pnl = (market_data['bidPrice'] - initial_price) * position_size
-            ylabel = 'PNL ($)'
+            line, = self.ax_pnl.plot(
+                pnl_data['timestamp'],
+                pnl_data['pnl'],
+                label=f'{stock} PnL $ (Max DD: {metrics["max_drawdown"]:.1f}%, Return: {metrics["return_percentage"]:.1f}%)'
+            )
+            ylabel = 'PnL ($)'
 
-        line, = self.ax_pnl.plot(market_data['timestamp'], pnl, label=f'{stock} {ylabel}')
         self.plot_elements[f'{stock}_pnl'] = line
         self.ax_pnl.set_ylabel(ylabel)
+
+        # Add metrics annotation
+        metrics_text = (
+            f'Total Return: {metrics["return_percentage"]:.1f}%\n'
+            f'Sharpe Ratio: {metrics["sharpe_ratio"]:.2f}\n'
+            f'Win Rate: {metrics["win_rate"]:.1f}%\n')
 
     def _clear_plots(self):
         self.ax_price.clear()
