@@ -77,7 +77,6 @@ class MarketDataViewer(QMainWindow):
             'bid': QCheckBox("Bid Price"),
             'ask': QCheckBox("Ask Price"),
             'trades': QCheckBox("Trades"),
-            'pred': QCheckBox("Predictions"),
             'std30': QCheckBox("30s Std Dev"),
             'std60': QCheckBox("60s Std Dev")
         }
@@ -107,7 +106,6 @@ class MarketDataViewer(QMainWindow):
         self.plot_elements = {
             'lines': {},
             'fills': {},
-            'predictions': {},
             'daily_lines': {}
         }
 
@@ -200,10 +198,6 @@ class MarketDataViewer(QMainWindow):
             if self.vis_checks['std60'].isChecked():
                 self.plot_std_dev(market_data, stock, 60, '#DC143C')
 
-            # Predictions
-            if self.vis_checks['pred'].isChecked():
-                self.plot_predictions(market_data, stock)
-
         # Load and plot trades
         try:
             trade_data_path = os.path.join(data_dir, f'trade_data_{stock}.csv')
@@ -227,23 +221,6 @@ class MarketDataViewer(QMainWindow):
             color=color, alpha=0.2, label=f'{stock} {window}s Std Dev'
         )
 
-    def plot_predictions(self, data, stock):
-        # Simple moving average crossover prediction
-        data['sma_fast'] = data['bidPrice'].rolling(window=10).mean()
-        data['sma_slow'] = data['bidPrice'].rolling(window=30).mean()
-
-        crossover_points = data[
-            (data['sma_fast'] > data['sma_slow']) &
-            (data['sma_fast'].shift(1) <= data['sma_slow'].shift(1))
-            ]
-
-        if not crossover_points.empty:
-            self.plot_elements['predictions'][stock] = self.ax.plot(
-                crossover_points['timestamp'],
-                crossover_points['bidPrice'],
-                'o', color='#FFA500', label=f'{stock} Signals'
-            )[0]
-
     def update_visibility(self):
         # Update visibility of plot elements based on checkboxes
         visibility = {
@@ -260,9 +237,6 @@ class MarketDataViewer(QMainWindow):
                 fill.set_visible(self.vis_checks['std30'].isChecked())
             elif '60' in key:
                 fill.set_visible(self.vis_checks['std60'].isChecked())
-
-        for line in self.plot_elements['predictions'].values():
-            line.set_visible(self.vis_checks['pred'].isChecked())
 
         # Daily lines always visible
         for line in self.plot_elements['daily_lines'].values():
