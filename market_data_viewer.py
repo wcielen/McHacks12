@@ -4,11 +4,9 @@ from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout,
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
 import matplotlib.pyplot as plt
-import pandas as pd
-from Other.training import PredictionPlotter
 from data_loader import load_market_data, load_trade_data
 from price_prediction import predict_price_changes
-#from .Other.model import load_model_and_predict
+import pandas as pd
 from weakref import WeakKeyDictionary
 import gc
 
@@ -19,9 +17,8 @@ class MarketDataViewer(QMainWindow):
         ('bid_price_check', "Bid Price", True),
         ('ask_price_check', "Ask Price", True),
         ('trades_check', "Trades", True),
-        ('minmax_lines_check', "Show Min/Max Lines", False),
         ('prediction_check', "Price Prediction", True),
-        ('model_prediction_check', "Model Prediction", True),
+        ('min_max_check', "Min/Max Lines", False),
         ('std_dev_30s_check', "30s Std Dev", False),
         ('std_dev_60s_check', "60s Std Dev", False),
         ('pnl_check', "Show PNL", True),
@@ -35,10 +32,11 @@ class MarketDataViewer(QMainWindow):
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
         self._setup_ui()
         self._connect_signals()
+        self.min_max_lines = WeakKeyDictionary()
 
     def _setup_ui(self):
-        self.setWindowTitle("Stock Overflow")
-        self.setGeometry(100, 100, 1200, 900)  # Increased height for PNL graph
+        self.setWindowTitle("Market Data Viewer")
+        self.setGeometry(100, 100, 1200, 900)
 
         main_widget = QWidget()
         main_layout = QVBoxLayout()
@@ -68,8 +66,6 @@ class MarketDataViewer(QMainWindow):
         self.std_dev_fills = WeakKeyDictionary()
         self.prediction_lines = WeakKeyDictionary()
         self.pnl_lines = WeakKeyDictionary()
-        self.minmax_lines = WeakKeyDictionary()
-        self.prediction_plotter = PredictionPlotter(self.ax_price, self.prediction_lines)
 
     def _create_controls_layout(self):
         controls_layout = QHBoxLayout()
@@ -115,44 +111,43 @@ class MarketDataViewer(QMainWindow):
 
         if self.bid_price_check.isChecked():
             line, = self.ax_price.plot(market_data['timestamp'],
-                                     market_data['bidPrice'],
-                                     label=f'{stock} Bid Price')
+                                       market_data['bidPrice'],
+                                       label=f'{stock} Bid Price')
             self.plot_lines[line] = f'{stock}_bid'
 
         if self.ask_price_check.isChecked():
             line, = self.ax_price.plot(market_data['timestamp'],
-                                     market_data['askPrice'],
-                                     label=f'{stock} Ask Price')
+                                       market_data['askPrice'],
+                                       label=f'{stock} Ask Price')
             self.plot_lines[line] = f'{stock}_ask'
 
-        if self.prediction_check.isChecked():
-            self.prediction_plotter.plot_predictions(
-                market_data, 
-                stock, 
-                show_predictions=True
-            )
         self._plot_standard_deviation(market_data, stock)
-    """
-        if self.model_prediction_check.isChecked():
-            try:
-                from Other.model import load_model_and_predict
-                model_predictions = load_model_and_predict(market_data)
-                if model_predictions is not None:
-                    line, = self.ax_price.plot(
-                        market_data['timestamp'],
-                        model_predictions,
-                        color='purple',
-                        linestyle=':',
-                        label=f'{stock} Model Prediction',
-                        alpha=0.7
-                    )
-                    self.prediction_lines[line] = f'{stock}_model_prediction'
-            except ImportError:
-                print("Model prediction module not found")
-        """
+        self._plot_min_max_lines(market_data, stock)
 
-        
+    def _plot_min_max_lines(self, market_data, stock):
+        """Plot minimum and maximum price lines for the stock"""
+        if self.min_max_check.isChecked():
+            # Calculate min and max prices
+            min_price = market_data['bidPrice'].min()
+            max_price = market_data['askPrice'].max()
 
+            # Create horizontal lines for min and max
+            min_line = self.ax_price.axhline(
+                y=min_price,
+                color='red',
+                linestyle=':',
+                label=f'{stock} Min Price ({min_price:.2f})'
+            )
+            max_line = self.ax_price.axhline(
+                y=max_price,
+                color='green',
+                linestyle=':',
+                label=f'{stock} Max Price ({max_price:.2f})'
+            )
+
+            # Store references to the lines
+            self.min_max_lines[min_line] = f'{stock}_min'
+            self.min_max_lines[max_line] = f'{stock}_max'
 
     def _plot_standard_deviation(self, market_data, stock):
         std_dev_configs = [
@@ -255,7 +250,7 @@ class MarketDataViewer(QMainWindow):
         self.std_dev_fills.clear()
         self.prediction_lines.clear()
         self.pnl_lines.clear()
-        self.minmax_lines.clear()
+        self.min_max_lines.clear()
         gc.collect()
 
         period = self.period_combo.currentText()
@@ -314,8 +309,7 @@ class MarketDataViewer(QMainWindow):
         visibility_map = {
             'bid': self.bid_price_check.isChecked(),
             'ask': self.ask_price_check.isChecked(),
-            'trade': self.trades_check.isChecked(),
-            'model_prediction': self.model_prediction_check.isChecked()
+            'trade': self.trades_check.isChecked()
         }
 
         for line, key in self.plot_lines.items():
@@ -324,6 +318,10 @@ class MarketDataViewer(QMainWindow):
                 for vis_type in visibility_map
                 if visibility_map[vis_type]
             ))
+
+        # Update min/max lines visibility
+        for line in self.min_max_lines:
+            line.set_visible(self.min_max_check.isChecked())
 
         std_dev_visibility = {
             '30s': self.std_dev_30s_check.isChecked(),
@@ -339,22 +337,12 @@ class MarketDataViewer(QMainWindow):
 
         for line in self.prediction_lines:
             line.set_visible(self.prediction_check.isChecked())
-            
-        for line in self.minmax_lines:
-            line.set_visible(self.minmax_lines_check.isChecked())
 
         # Update PNL visibility
         self.ax_pnl.set_visible(self.pnl_check.isChecked())
         if self.pnl_check.isChecked():
             # Reload data to switch between percentage and absolute values
             self.load_and_plot_data()
-        
-        for key, line in self.prediction_lines.items():
-            line.set_visible(self.prediction_check.isChecked())
-            if f"{key.split('_')[0]}_confidence" in self.prediction_plotter.confidence_bands:
-                self.prediction_plotter.confidence_bands[f"{key.split('_')[0]}_confidence"].set_visible(
-                    self.prediction_check.isChecked()
-                )
 
         self.canvas.draw()
 
@@ -364,6 +352,6 @@ class MarketDataViewer(QMainWindow):
         self.std_dev_fills.clear()
         self.prediction_lines.clear()
         self.pnl_lines.clear()
-        self.minmax_lines.clear()
+        self.min_max_lines.clear()
         gc.collect()
         super().closeEvent(event)
