@@ -19,6 +19,7 @@ class MarketDataViewer(QMainWindow):
         ('bid_price_check', "Bid Price", True),
         ('ask_price_check', "Ask Price", True),
         ('trades_check', "Trades", True),
+        ('minmax_lines_check', "Show Min/Max Lines", False),
         ('prediction_check', "Price Prediction", True),
         ('std_dev_30s_check', "30s Std Dev", False),
         ('std_dev_60s_check', "60s Std Dev", False),
@@ -66,6 +67,7 @@ class MarketDataViewer(QMainWindow):
         self.std_dev_fills = WeakKeyDictionary()
         self.prediction_lines = WeakKeyDictionary()
         self.pnl_lines = WeakKeyDictionary()
+        self.minmax_lines = WeakKeyDictionary()
         self.prediction_plotter = PredictionPlotter(self.ax_price, self.prediction_lines)
 
     def _create_controls_layout(self):
@@ -109,6 +111,17 @@ class MarketDataViewer(QMainWindow):
 
     def _plot_market_data(self, market_data, stock):
         market_data['timestamp'] = pd.to_datetime(market_data['timestamp'], format='%H:%M:%S.%f')
+
+        # Plot min/max lines if enabled
+        if self.minmax_lines_check.isChecked():
+            min_price = market_data['bidPrice'].min()
+            max_price = market_data['bidPrice'].max()
+            
+            min_line = self.ax_price.axhline(y=min_price, color='red', linestyle=':', label=f'{stock} Min Price')
+            max_line = self.ax_price.axhline(y=max_price, color='green', linestyle=':', label=f'{stock} Max Price')
+            
+            self.minmax_lines[min_line] = f'{stock}_min'
+            self.minmax_lines[max_line] = f'{stock}_max'
 
         if self.bid_price_check.isChecked():
             line, = self.ax_price.plot(market_data['timestamp'],
@@ -233,6 +246,7 @@ class MarketDataViewer(QMainWindow):
         self.prediction_lines.clear()
         self.prediction_plotter.clear()
         self.pnl_lines.clear()
+        self.minmax_lines.clear()
         gc.collect()
 
         period = self.period_combo.currentText()
@@ -315,6 +329,9 @@ class MarketDataViewer(QMainWindow):
 
         for line in self.prediction_lines:
             line.set_visible(self.prediction_check.isChecked())
+            
+        for line in self.minmax_lines:
+            line.set_visible(self.minmax_lines_check.isChecked())
 
         # Update PNL visibility
         self.ax_pnl.set_visible(self.pnl_check.isChecked())
@@ -338,5 +355,6 @@ class MarketDataViewer(QMainWindow):
         self.prediction_lines.clear()
         self.prediction_plotter.clear()
         self.pnl_lines.clear()
+        self.minmax_lines.clear()
         gc.collect()
         super().closeEvent(event)
