@@ -3,88 +3,38 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import logging
-<<<<<<< HEAD
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, 
-                             QComboBox, QWidget, QPushButton)
-from PyQt5.QtGui import QPalette, QColor, QIcon
-from PyQt5.QtCore import Qt
-=======
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
                              QComboBox, QPushButton, QWidget, QCheckBox, QLabel)
->>>>>>> 8ec077799523ca89e5a99001bb066d593100e6ff
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
 
+# Set up logging to only log errors
 logging.basicConfig(level=logging.ERROR)
 
 
 class MarketDataViewer(QMainWindow):
     def __init__(self):
         super().__init__()
-<<<<<<< HEAD
-        
-=======
 
         # Get the absolute path of the script's directory
->>>>>>> 8ec077799523ca89e5a99001bb066d593100e6ff
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
 
         self.setWindowTitle("Market Data Viewer")
-<<<<<<< HEAD
-        self.setGeometry(100, 100, 800, 600)
-        
-=======
         self.setGeometry(100, 100, 1000, 700)
 
         # Create main widget and layout
->>>>>>> 8ec077799523ca89e5a99001bb066d593100e6ff
         main_widget = QWidget()
         main_layout = QVBoxLayout()
         main_widget.setLayout(main_layout)
         self.setCentralWidget(main_widget)
-<<<<<<< HEAD
-        
-=======
 
         # Create controls
->>>>>>> 8ec077799523ca89e5a99001bb066d593100e6ff
         controls_layout = QHBoxLayout()
         self.period_combo = QComboBox()
         self.stock_combo = QComboBox()
-        
-        # Dark mode toggle button
-      
-        self.dark_mode_button.setIcon(QIcon("dark_mode_icon.png"))  # Replace with an actual icon file
-        self.dark_mode_button.setToolTip("Toggle Dark Mode")
-        self.dark_mode_button.clicked.connect(self.toggle_dark_mode)
-        
-        # Add components to controls layout
+        self.load_button = QPushButton("Load Data")
         controls_layout.addWidget(self.period_combo)
         controls_layout.addWidget(self.stock_combo)
-<<<<<<< HEAD
-        controls_layout.addWidget(self.dark_mode_button)  # Add the button here
-        
-        plt.rcParams.update({
-            'figure.facecolor': '#1E1E1E',
-            'axes.facecolor': '#1E1E1E',
-            'axes.edgecolor': 'white',
-            'axes.labelcolor': 'white',
-            'text.color': 'white',
-            'xtick.color': 'white',
-            'ytick.color': 'white',
-        })
-        
-        self.figure, self.ax = plt.subplots(figsize=(8, 6), facecolor='#1E1E1E', edgecolor='white')
-        self.figure.set_facecolor('#1E1E1E')
-        
-        self.canvas = FigureCanvas(self.figure)
-        self.toolbar = NavigationToolbar2QT(self.canvas, self)
-        
-        main_layout.addLayout(controls_layout)
-        main_layout.addWidget(self.toolbar)
-        main_layout.addWidget(self.canvas)
-        
-=======
         controls_layout.addWidget(self.load_button)
 
         # Create toggle checkboxes
@@ -134,42 +84,21 @@ class MarketDataViewer(QMainWindow):
         self.prediction_check.stateChanged.connect(self.toggle_prediction)  # Connect the prediction toggle
 
         # Initialize combo boxes
->>>>>>> 8ec077799523ca89e5a99001bb066d593100e6ff
         self.initialize_combos()
-        
-        # Connect combo changes to auto load
-        self.period_combo.currentTextChanged.connect(self.auto_load_data)
-        self.stock_combo.currentTextChanged.connect(self.auto_load_data)
-        
-        self.is_dark_mode = True
-        self.set_dark_mode(True)
-        
-        # Auto load initial data
-        self.auto_load_data()
 
     def initialize_combos(self):
+        # Populate period combo box
         for i in range(1, 16):
             self.period_combo.addItem(f"Period{i}")
-<<<<<<< HEAD
-        
-=======
 
         # Populate stock combo box
->>>>>>> 8ec077799523ca89e5a99001bb066d593100e6ff
         for stock in ['A', 'B', 'C', 'D', 'E']:
             self.stock_combo.addItem(stock)
 
-    def auto_load_data(self):
+    def load_and_plot_data(self):
+        # Get selected period and stock
         period = self.period_combo.currentText()
         stock = self.stock_combo.currentText()
-<<<<<<< HEAD
-        
-        data_dir = os.path.join(self.base_dir, 'TrainingData', period, stock)
-        
-        market_data = self.load_market_data(data_dir, stock)
-        trade_data = self.load_trade_data(data_dir, stock)
-        
-=======
 
         # Construct full path to data directory
         data_dir = os.path.join(self.base_dir, 'TrainingData', period, stock)
@@ -181,38 +110,7 @@ class MarketDataViewer(QMainWindow):
         trade_data = self.load_trade_data(data_dir, stock)
 
         # Plot data
->>>>>>> 8ec077799523ca89e5a99001bb066d593100e6ff
         self.plot_data(market_data, trade_data)
-
-    def toggle_dark_mode(self):
-        self.is_dark_mode = not self.is_dark_mode
-        self.set_dark_mode(self.is_dark_mode)
-
-    def set_dark_mode(self, is_dark):
-        if is_dark:
-            self.setStyleSheet("""
-                QWidget { 
-                    background-color: #353535; 
-                    color: white; 
-                }
-                QComboBox {
-                    background-color: #2E2E2E;
-                    color: white;
-                    border: 1px solid #4E4E4E;
-                    border-radius: 4px;
-                }
-            """)
-            
-            plt.style.use('dark_background')
-            self.figure.set_facecolor('#1E1E1E')
-            self.ax.set_facecolor('#1E1E1E')
-        else:
-            self.setStyleSheet("")
-            plt.style.use('default')
-            self.figure.set_facecolor('white')
-            self.ax.set_facecolor('white')
-        
-        self.canvas.draw()
 
     def load_market_data(self, data_dir, stock):
         all_data = []
@@ -246,12 +144,8 @@ class MarketDataViewer(QMainWindow):
     def plot_data(self, market_data, trade_data):
         # Clear previous plot
         self.ax.clear()
-<<<<<<< HEAD
-        
-=======
 
         # Plot market data
->>>>>>> 8ec077799523ca89e5a99001bb066d593100e6ff
         if market_data is not None and not market_data.empty:
             try:
                 market_data['timestamp'] = pd.to_datetime(market_data['timestamp'], format='%H:%M:%S.%f')
@@ -265,12 +159,8 @@ class MarketDataViewer(QMainWindow):
                                               label='Ask Price', visible=self.ask_price_check.isChecked())
             except Exception as e:
                 logging.error(f"Error plotting market data: {e}")
-<<<<<<< HEAD
-        
-=======
 
         # Plot trade data (with only the trade line in green)
->>>>>>> 8ec077799523ca89e5a99001bb066d593100e6ff
         if trade_data is not None and not trade_data.empty:
             try:
                 trade_data['timestamp'] = pd.to_datetime(trade_data['timestamp'], format='%H:%M:%S.%f')
@@ -282,12 +172,6 @@ class MarketDataViewer(QMainWindow):
                                                 visible=self.trades_check.isChecked())
             except Exception as e:
                 logging.error(f"Error plotting trade data: {e}")
-<<<<<<< HEAD
-        
-        self.ax.set_xlabel('Time')
-        self.ax.set_ylabel('Price')
-        
-=======
 
         # Plot price prediction if checkbox is checked
         if self.prediction_check.isChecked():
@@ -302,17 +186,12 @@ class MarketDataViewer(QMainWindow):
         self.ax.set_ylabel('Price')
 
         # Only add legend if there are artists
->>>>>>> 8ec077799523ca89e5a99001bb066d593100e6ff
         if len(self.ax.get_lines()) > 0 or len(self.ax.collections) > 0:
             self.ax.legend()
 
         self.ax.set_title(f"{self.period_combo.currentText()} - Stock {self.stock_combo.currentText()}")
-<<<<<<< HEAD
-        
-=======
 
         # Enable tight layout and auto-adjust
->>>>>>> 8ec077799523ca89e5a99001bb066d593100e6ff
         plt.tight_layout()
         self.canvas.draw()
 
@@ -409,8 +288,6 @@ if __name__ == '__main__':
     viewer = MarketDataViewer()
     viewer.show()
     sys.exit(app.exec_())
-<<<<<<< HEAD
-=======
 
 '''
 sample data in TrainingData/Period3/C/market_data_C.csv:
@@ -430,4 +307,3 @@ price,volume,timestamp
 
 '''
 
->>>>>>> 8ec077799523ca89e5a99001bb066d593100e6ff
