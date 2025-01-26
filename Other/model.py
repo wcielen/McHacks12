@@ -31,21 +31,30 @@ def save_model(results, output_dir='./models'):
     print(f"Model saved to: {model_path}")
     print(f"Scaler saved to: {scaler_path}")
 
-def load_model(model_path='./models/stock_prediction_model.joblib', 
-               scaler_path='./models/feature_scaler.joblib'):
+def load_model_and_predict(X, model_path='./models/stock_prediction_model.joblib', 
+                            scaler_path='./models/feature_scaler.joblib'):
     """
-    Load saved model and scaler
+    Load saved model and scaler, then predict on input data
+    
+    Args:
+        X (pd.DataFrame): Input features to predict
+        model_path (str): Path to saved model
+        scaler_path (str): Path to saved scaler
     
     Returns:
-        dict: Loaded model and scaler
+        np.array: Predicted values
     """
+    # Load model and scaler
     model = joblib.load(model_path)
     scaler = joblib.load(scaler_path)
     
-    return {
-        'model': model,
-        'scaler': scaler
-    }
+    # Scale input features
+    X_scaled = scaler.transform(X)
+    
+    # Make predictions
+    predictions = model.predict(X_scaled)
+    
+    return predictions
 
 def load_trading_data(base_path):
     """
