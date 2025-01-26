@@ -231,6 +231,7 @@ class MarketDataViewer(QMainWindow):
         self.plot_lines.clear()
         self.std_dev_fills.clear()
         self.prediction_lines.clear()
+        self.prediction_plotter.clear()
         self.pnl_lines.clear()
         gc.collect()
 
@@ -335,6 +336,7 @@ class MarketDataViewer(QMainWindow):
         self.plot_lines.clear()
         self.std_dev_fills.clear()
         self.prediction_lines.clear()
+        self.prediction_plotter.clear()
         self.pnl_lines.clear()
         gc.collect()
         super().closeEvent(event)
