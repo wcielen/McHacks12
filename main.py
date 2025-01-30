@@ -4,7 +4,7 @@ from market_data_viewer import MarketDataViewer
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    viewer = MarketDataViewer()
+    viewer = MarketDataViewer("./cache")
     viewer.show()
     sys.exit(app.exec_())
 

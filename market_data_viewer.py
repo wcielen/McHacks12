@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout,
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
 import matplotlib.pyplot as plt
-from data_loader import load_market_data, load_trade_data
+from data_loader import MarketDataLoader
 from price_prediction import predict_price_changes
 import pandas as pd
 from typing import Dict, Optional
@@ -24,14 +24,15 @@ class MarketDataViewer(QMainWindow):
         ('std_dev_30s_check', "30s Std Dev", False),
         ('std_dev_60s_check', "60s Std Dev", False),
         ('pnl_check', "Show PNL", True),
-        ('pnl_percent_check', "PNL as Percentage", True)
+        ('pnl_percent_check', "PNL as %", True)
     ]
     INITIAL_INVESTMENT = 1_000_000
 
-    def __init__(self):
+    def __init__(self, cache_dir: Optional[str] = None):
         super().__init__()
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
         self.plot_elements: Dict = {}
+        self.data_loader = MarketDataLoader(cache_dir=cache_dir)
         self._setup_ui()
         self._connect_signals()
 
@@ -58,7 +59,7 @@ class MarketDataViewer(QMainWindow):
     def _create_controls_layout(self):
         layout = QHBoxLayout()
         self.period_combo = QComboBox()
-        self.period_combo.addItems([f"Period{i}" for i in range(1, 21)])
+        self.period_combo.addItems([f"Period{i}" for i in range(1, 21)]) #should put a space between text and number
         self.period_combo.setCurrentText("Period1")
 
         self.load_button = QPushButton("Load Data")
@@ -89,12 +90,36 @@ class MarketDataViewer(QMainWindow):
             toggle = getattr(self, toggle_attr)
             toggle.stateChanged.connect(self.update_plot_visibility)
 
-    def _process_market_data(self, market_data: pd.DataFrame) -> Optional[pd.DataFrame]:
-        if market_data is None or market_data.empty:
-            return None
-        market_data = market_data.copy()
-        market_data['timestamp'] = pd.to_datetime(market_data['timestamp'], format='%H:%M:%S.%f')
-        return market_data
+    def load_and_plot_data(self):
+        self._clear_plots()
+
+        period = self.period_combo.currentText() #Would need to modify this to allow text to be seperate from num
+        selected_stocks = [stock for stock, checkbox in self.stock_checkboxes.items()
+                           if checkbox.isChecked()]
+
+        for stock in selected_stocks:
+            data_dir = os.path.join(self.base_dir, 'TrainingData', period, stock)
+
+            market_data = self.data_loader.load_market_data(data_dir, stock)
+            if market_data is not None:
+                self._plot_market_data(market_data, stock)
+
+                if self.prediction_check.isChecked(): #We could in theory run plot_predictions and plot_pnl in parallel
+                    self._plot_predictions(market_data, stock)
+
+                if self.pnl_check.isChecked():
+                    self._calculate_and_plot_pnl(market_data, stock)
+
+                del market_data
+                gc.collect()
+
+            trade_data = self.data_loader.load_trade_data(data_dir, stock)
+            if trade_data is not None:
+                self._plot_trade_data(trade_data, stock)
+                del trade_data
+                gc.collect()
+
+        self._update_plot_layout()
 
     def _plot_market_data(self, market_data: pd.DataFrame, stock: str):
         if market_data is None:
@@ -112,14 +137,14 @@ class MarketDataViewer(QMainWindow):
                                        label=f'{stock} Ask Price')
             self.plot_elements[f'{stock}_ask'] = line
 
-        self._plot_standard_deviation(market_data, stock)
+        self._plot_standard_deviation(market_data, stock) #Std and min/max ccould also be done in parallel
         self._plot_min_max_lines(market_data, stock)
 
     def _plot_min_max_lines(self, market_data: pd.DataFrame, stock: str):
         if not self.min_max_check.isChecked():
             return
 
-        min_price = market_data['bidPrice'].min()
+        min_price = market_data['bidPrice'].min() # We could definitely find both in one sweep, could even find them when we initially plot the graph or use Dask
         max_price = market_data['askPrice'].max()
 
         min_line = self.ax_price.axhline(y=min_price, color='red', linestyle=':',
@@ -141,11 +166,11 @@ class MarketDataViewer(QMainWindow):
                 continue
 
             window_size = int(window_seconds * 1000)
-            std_dev = market_data['bidPrice'].rolling(window=window_size, min_periods=1).std()
+            std_dev = market_data['bidPrice'].rolling(window=window_size, min_periods=1).std() #I think Panda's has a faster rolling algo
             lower_bound = market_data['bidPrice'] - std_dev
             upper_bound = market_data['bidPrice'] + std_dev
 
-            fill = self.ax_price.fill_between(
+            fill = self.ax_price.fill_between( #I tested this, it is remarkably slow at filling, could consider downsampling or asynchronus ploting
                 market_data['timestamp'],
                 lower_bound,
                 upper_bound,
@@ -155,23 +180,24 @@ class MarketDataViewer(QMainWindow):
             )
             self.plot_elements[f'{stock}_{window_seconds}s_std'] = fill
 
-    def _plot_predictions(self, market_data: pd.DataFrame, stock: str):
+    def _plot_predictions(self, market_data: pd.DataFrame, stock: str): #I don't think we need to extract timestamp and predicted_price multiple times, we could just extract the whole thing once
         prediction_data = predict_price_changes(market_data)
         if prediction_data is None or prediction_data.empty:
             return
 
         line, = self.ax_price.plot(
-            prediction_data['timestamp'],
+            prediction_data['timestamp'], #here we reaccess it every time, could just take out the thing above
             prediction_data['predicted_price'],
             color='orange',
             linestyle='--',
             label=f'{stock} Predicted Price',
             alpha=0.7
         )
+        
         last_timestamp = market_data['timestamp'].iloc[-1]
         next_timestamp = last_timestamp + pd.Timedelta(microseconds=1)
         last_predicted_price = prediction_data['predicted_price'].iloc[-1]
-        next_predicted_price = last_predicted_price  # Replace with actual prediction logic if available
+        next_predicted_price = last_predicted_price
 
         self.ax_price.plot(
             [last_timestamp, next_timestamp],
@@ -189,11 +215,8 @@ class MarketDataViewer(QMainWindow):
         if not self.trades_check.isChecked() or trade_data is None:
             return
 
-        trade_data = trade_data.copy()
-        trade_data['timestamp'] = pd.to_datetime(trade_data['timestamp'], format='%H:%M:%S.%f')
-
         line, = self.ax_price.plot(
-            trade_data['timestamp'],
+            trade_data['timestamp'], # same here, I think it be slightly better if we extracted the info frist, we could also down sample tbh
             trade_data['price'],
             linestyle='-',
             marker='',
@@ -206,16 +229,10 @@ class MarketDataViewer(QMainWindow):
         if not self.pnl_check.isChecked() or market_data is None:
             return
 
-        # Initialize trading strategy
         strategy = TradingStrategy()
-
-        # Calculate PnL using the new strategy
         pnl_data = strategy.calculate_pnl(market_data)
-
-        # Calculate trading metrics
         metrics = calculate_trading_metrics(pnl_data)
 
-        # Plot PnL
         if self.pnl_percent_check.isChecked():
             line, = self.ax_pnl.plot(
                 pnl_data['timestamp'],
@@ -234,65 +251,23 @@ class MarketDataViewer(QMainWindow):
         self.plot_elements[f'{stock}_pnl'] = line
         self.ax_pnl.set_ylabel(ylabel)
 
-        # Add metrics annotation
-        metrics_text = (
-            f'Total Return: {metrics["return_percentage"]:.1f}%\n'
-            f'Sharpe Ratio: {metrics["sharpe_ratio"]:.2f}\n'
-            f'Win Rate: {metrics["win_rate"]:.1f}%\n')
-
     def _clear_plots(self):
-        self.ax_price.clear()
-        self.ax_pnl.clear()
+        self.ax_price.cla()
+        self.ax_pnl.cla()
         for element in self.plot_elements.values():
             try:
-                if hasattr(element, 'remove'):
-                    element.remove()
-                else:
-                    # For collections like fill_between areas
-                    element.remove()
+                element.remove()
             except NotImplementedError:
-                # Handle unsupported remove calls
                 pass
         self.plot_elements.clear()
         gc.collect()
-
-    def load_and_plot_data(self):
-        self._clear_plots()
-
-        period = self.period_combo.currentText()
-        selected_stocks = [stock for stock, checkbox in self.stock_checkboxes.items()
-                           if checkbox.isChecked()]
-
-        for stock in selected_stocks:
-            data_dir = os.path.join(self.base_dir, 'TrainingData', period, stock)
-
-            market_data = self._process_market_data(load_market_data(data_dir, stock))
-            if market_data is not None:
-                self._plot_market_data(market_data, stock)
-
-                if self.prediction_check.isChecked():
-                    self._plot_predictions(market_data, stock)
-
-                if self.pnl_check.isChecked():
-                    self._calculate_and_plot_pnl(market_data, stock)
-
-                del market_data
-                gc.collect()
-
-            trade_data = load_trade_data(data_dir, stock)
-            if trade_data is not None:
-                self._plot_trade_data(trade_data, stock)
-                del trade_data
-                gc.collect()
-
-        self._update_plot_layout()
 
     def _update_plot_layout(self):
         self.ax_price.set_xlabel('')
         self.ax_price.set_ylabel('Price')
         self.ax_price.set_title(f"{self.period_combo.currentText()} - Selected Stocks")
         if self.ax_price.get_lines() or self.ax_price.collections:
-            self.ax_price.legend()
+            self.ax_price.legend() #shouldnot have to remake the legend if it hasn't changed
 
         self.ax_pnl.set_visible(self.pnl_check.isChecked())
         if self.pnl_check.isChecked():
@@ -301,11 +276,10 @@ class MarketDataViewer(QMainWindow):
                 self.ax_pnl.legend()
 
         plt.tight_layout()
-        self.canvas.draw()
+        self.canvas.draw() #could draw_idle instead...?
 
     def update_plot_visibility(self):
         needs_reload = False
-
         if any(attr in ('pnl_check', 'pnl_percent_check')
                for attr, _, _ in self.VISUALIZATION_TOGGLES
                if getattr(self, attr).isChecked()):
