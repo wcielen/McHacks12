@@ -9,6 +9,7 @@ from price_prediction import predict_price_changes
 import pandas as pd
 from typing import Dict, Optional
 import gc
+from concurrent.futures import ThreadPoolExecutor
 
 from trading_strategy import TradingStrategy, calculate_trading_metrics
 
@@ -93,31 +94,39 @@ class MarketDataViewer(QMainWindow):
     def load_and_plot_data(self):
         self._clear_plots()
 
-        period = self.period_combo.currentText() #Would need to modify this to allow text to be seperate from num
+        period = self.period_combo.currentText()
         selected_stocks = [stock for stock, checkbox in self.stock_checkboxes.items()
                            if checkbox.isChecked()]
 
-        for stock in selected_stocks:
-            data_dir = os.path.join(self.base_dir, 'TrainingData', period, stock)
+        with ThreadPoolExecutor() as executor:
+            futures = []
 
-            market_data = self.data_loader.load_market_data(data_dir, stock)
-            if market_data is not None:
-                self._plot_market_data(market_data, stock)
+            for stock in selected_stocks:
+                data_dir = os.path.join(self.base_dir, 'TrainingData', period, stock)
 
-                if self.prediction_check.isChecked(): #We could in theory run plot_predictions and plot_pnl in parallel
-                    self._plot_predictions(market_data, stock)
+                market_data = self.data_loader.load_market_data(data_dir, stock)
+                if market_data is not None:
+                    self._plot_market_data(market_data, stock)
 
-                if self.pnl_check.isChecked():
-                    self._calculate_and_plot_pnl(market_data, stock)
+                    # Run plot_predictions and calculate_and_plot_pnl in parallel
+                    if self.prediction_check.isChecked(): #should check if it actually changed
+                        futures.append(executor.submit(self._plot_predictions, market_data, stock))
 
-                del market_data
-                gc.collect()
+                    if self.pnl_check.isChecked(): #same here no need to recalc if it hasn't changed
+                        futures.append(executor.submit(self._calculate_and_plot_pnl, market_data, stock))
 
-            trade_data = self.data_loader.load_trade_data(data_dir, stock)
-            if trade_data is not None:
-                self._plot_trade_data(trade_data, stock)
-                del trade_data
-                gc.collect()
+                    del market_data
+                    gc.collect()
+
+                trade_data = self.data_loader.load_trade_data(data_dir, stock)
+                if trade_data is not None:
+                    self._plot_trade_data(trade_data, stock)
+                    del trade_data
+                    gc.collect()
+
+            # Wait for all futures to complete
+            for future in futures: #is this necessary????
+                future.result()  
 
         self._update_plot_layout()
 
@@ -137,7 +146,7 @@ class MarketDataViewer(QMainWindow):
                                        label=f'{stock} Ask Price')
             self.plot_elements[f'{stock}_ask'] = line
 
-        self._plot_standard_deviation(market_data, stock) #Std and min/max ccould also be done in parallel
+        self._plot_standard_deviation(market_data, stock) #Std and min/max could also be done in parallel
         self._plot_min_max_lines(market_data, stock)
 
     def _plot_min_max_lines(self, market_data: pd.DataFrame, stock: str):

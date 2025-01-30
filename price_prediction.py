@@ -18,7 +18,7 @@ def predict_price_changes(market_data: pd.DataFrame) -> Optional[pd.DataFrame]:
 
     try:
         # Work with a copy to prevent modifications to original data
-        data = market_data.copy()
+        data = market_data.copy() #surely there is a better way
 
         # Ensure timestamp is datetime
         data['timestamp'] = pd.to_datetime(data['timestamp'], format='%H:%M:%S.%f')

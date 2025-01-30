@@ -195,7 +195,7 @@ class TradingStrategy:
     def calculate_pnl(self, market_data: pd.DataFrame) -> pd.DataFrame:
         """Calculate PnL based on trading signals and positions."""
         signals_df = self.calculate_signals(market_data)
-        portfolio_value = 1_000_000  # Initial portfolio value
+        portfolio_value = 1_000_000  # Initial portfolio value (why do we have this also set in the market data viewer?)
         pnl_records = []
 
         for i in range(len(signals_df)):

@@ -1,7 +1,7 @@
 import sys
 from PyQt5.QtWidgets import QApplication
 from market_data_viewer import MarketDataViewer
-
+#Period 1 A and B is best looking for 2 stocks at once, Period 7 A is the best stock
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     viewer = MarketDataViewer("./cache")
