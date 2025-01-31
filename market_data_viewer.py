@@ -31,11 +31,15 @@ class MarketDataViewer(QMainWindow):
 
     def __init__(self, cache_dir: Optional[str] = None):
         super().__init__()
+        self.last_selected_stocks = set()
+        self.last_selected_period = None
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
         self.plot_elements: Dict = {}
         self.data_loader = MarketDataLoader(cache_dir=cache_dir)
         self._setup_ui()
         self._connect_signals()
+        self.last_prediction_state = self.prediction_check.isChecked()
+        self.last_pnl_state = self.pnl_check.isChecked()
 
     def _setup_ui(self):
         self.setWindowTitle("Market Data Viewer")
@@ -92,11 +96,22 @@ class MarketDataViewer(QMainWindow):
             toggle.stateChanged.connect(self.update_plot_visibility)
 
     def load_and_plot_data(self):
-        self._clear_plots()
-
         period = self.period_combo.currentText()
         selected_stocks = [stock for stock, checkbox in self.stock_checkboxes.items()
                            if checkbox.isChecked()]
+        prediction_toggle_changed = self.prediction_check.isChecked() != self.last_prediction_state
+
+        predictions_need_update = (selected_stocks != self.last_selected_stocks) or \
+                            (period != self.last_selected_period) or \
+                            prediction_toggle_changed
+        
+        pnl_toggle_changed = self.pnl_check.isChecked() != self.last_pnl_state
+        pnl_need_update = (selected_stocks != self.last_selected_stocks) or \
+                            (period != self.last_selected_period) or \
+                            pnl_toggle_changed
+        
+
+        self._clear_plots(not predictions_need_update, not pnl_need_update)
 
         with ThreadPoolExecutor() as executor:
             futures = []
@@ -109,11 +124,15 @@ class MarketDataViewer(QMainWindow):
                     self._plot_market_data(market_data, stock)
 
                     # Run plot_predictions and calculate_and_plot_pnl in parallel
-                    if self.prediction_check.isChecked(): #should check if it actually changed
+                    if self.prediction_check.isChecked()  and predictions_need_update: #should check if it actually changed
                         futures.append(executor.submit(self._plot_predictions, market_data, stock))
+                    if not predictions_need_update:
+                        print("predictions already updated")
 
-                    if self.pnl_check.isChecked(): #same here no need to recalc if it hasn't changed
+                    if self.pnl_check.isChecked() and pnl_need_update: #same here no need to recalc if it hasn't changed
                         futures.append(executor.submit(self._calculate_and_plot_pnl, market_data, stock))
+                    if not pnl_need_update:
+                        print("pnl already updated")
 
                     del market_data
                     gc.collect()
@@ -129,6 +148,13 @@ class MarketDataViewer(QMainWindow):
                 future.result()  
 
         self._update_plot_layout()
+
+        # Update tracking variables
+        self.last_selected_stocks = selected_stocks
+        self.last_selected_period = period
+        self.last_prediction_state = self.prediction_check.isChecked()
+        self.last_pnl_state = self.pnl_check.isChecked()
+
 
     def _plot_market_data(self, market_data: pd.DataFrame, stock: str):
         if market_data is None:
@@ -190,6 +216,7 @@ class MarketDataViewer(QMainWindow):
             self.plot_elements[f'{stock}_{window_seconds}s_std'] = fill
 
     def _plot_predictions(self, market_data: pd.DataFrame, stock: str): #I don't think we need to extract timestamp and predicted_price multiple times, we could just extract the whole thing once
+        print("calculating predictions")
         prediction_data = predict_price_changes(market_data)
         if prediction_data is None or prediction_data.empty:
             return
@@ -235,6 +262,7 @@ class MarketDataViewer(QMainWindow):
         self.plot_elements[f'{stock}_trade'] = line
 
     def _calculate_and_plot_pnl(self, market_data: pd.DataFrame, stock: str):
+        print("calculating pnl")
         if not self.pnl_check.isChecked() or market_data is None:
             return
 
@@ -260,15 +288,22 @@ class MarketDataViewer(QMainWindow):
         self.plot_elements[f'{stock}_pnl'] = line
         self.ax_pnl.set_ylabel(ylabel)
 
-    def _clear_plots(self):
-        self.ax_price.cla()
-        self.ax_pnl.cla()
-        for element in self.plot_elements.values():
+    def _clear_plots(self, keep_predictions=False, keep_pnl=False):
+        #self.ax_price.cla()
+        #self.ax_pnl.cla()
+        for key in list(self.plot_elements.keys()):
+            if keep_predictions and 'prediction' in key:
+                print("found predictions")
+                continue
+            if keep_pnl and 'pnl' in key:
+                print("found pnl")
+                continue
+
             try:
-                element.remove()
+                self.plot_elements[key].remove()
             except NotImplementedError:
                 pass
-        self.plot_elements.clear()
+            del self.plot_elements[key]
         gc.collect()
 
     def _update_plot_layout(self):
