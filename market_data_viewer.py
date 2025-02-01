@@ -40,6 +40,7 @@ class MarketDataViewer(QMainWindow):
         self._connect_signals()
         self.last_prediction_state = self.prediction_check.isChecked()
         self.last_pnl_state = self.pnl_check.isChecked()
+        self.last_pnl_percent_state = self.pnl_percent_check.isChecked()
 
     def _setup_ui(self):
         self.setWindowTitle("Market Data Viewer")
@@ -105,7 +106,7 @@ class MarketDataViewer(QMainWindow):
                             (period != self.last_selected_period) or \
                             prediction_toggle_changed
         
-        pnl_toggle_changed = self.pnl_check.isChecked() != self.last_pnl_state
+        pnl_toggle_changed = self.pnl_check.isChecked() != self.last_pnl_state or self.pnl_percent_check.isChecked() != self.last_pnl_percent_state
         pnl_need_update = (selected_stocks != self.last_selected_stocks) or \
                             (period != self.last_selected_period) or \
                             pnl_toggle_changed
@@ -154,6 +155,7 @@ class MarketDataViewer(QMainWindow):
         self.last_selected_period = period
         self.last_prediction_state = self.prediction_check.isChecked()
         self.last_pnl_state = self.pnl_check.isChecked()
+        self.last_pnl_percent_state = self.pnl_percent_check.isChecked()
 
 
     def _plot_market_data(self, market_data: pd.DataFrame, stock: str):
@@ -272,7 +274,14 @@ class MarketDataViewer(QMainWindow):
         pnl_data = strategy.calculate_pnl(market_data)
         metrics = calculate_trading_metrics(pnl_data)
 
+        if pnl_data is None or pnl_data.empty:
+            print(f"No PnL data for {stock}")
+            return
+
         if self.pnl_percent_check.isChecked():
+            if pnl_data['pnl_percentage'].isna().all():
+                print(f"PnL percentage contains NaN values for {stock}")
+                return
             line, = self.ax_pnl.plot(
                 pnl_data['timestamp'],
                 pnl_data['pnl_percentage'],
@@ -280,6 +289,9 @@ class MarketDataViewer(QMainWindow):
             )
             ylabel = 'PnL (%)'
         else:
+            if pnl_data['pnl'].isna().all():
+                print(f"PnL values contain NaN for {stock}")
+                return
             line, = self.ax_pnl.plot(
                 pnl_data['timestamp'],
                 pnl_data['pnl'],
@@ -289,6 +301,12 @@ class MarketDataViewer(QMainWindow):
 
         self.plot_elements[f'{stock}_pnl'] = line
         self.ax_pnl.set_ylabel(ylabel)
+
+        # Ensure y-axis is properly scaled
+        self.ax_pnl.relim()
+        self.ax_pnl.autoscale_view()
+
+
 
     def _clear_plots(self, keep_predictions=False, keep_pnl=False):
         #self.ax_price.cla()
