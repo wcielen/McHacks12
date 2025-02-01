@@ -235,7 +235,8 @@ class MarketDataViewer(QMainWindow):
         last_predicted_price = prediction_data['predicted_price'].iloc[-1]
         next_predicted_price = last_predicted_price
 
-        self.ax_price.plot(
+        print("plotting a dot")
+        dot, = self.ax_price.plot(
             [last_timestamp, next_timestamp],
             [last_predicted_price, next_predicted_price],
             color='purple',
@@ -245,6 +246,7 @@ class MarketDataViewer(QMainWindow):
             label=f'{stock} Next Prediction'
         )
         self.plot_elements[f'{stock}_prediction'] = line
+        self.plot_elements[f'{stock}_prediction_dot'] = dot
         del prediction_data
 
     def _plot_trade_data(self, trade_data: pd.DataFrame, stock: str):
@@ -298,7 +300,7 @@ class MarketDataViewer(QMainWindow):
             if keep_pnl and 'pnl' in key:
                 print("found pnl")
                 continue
-
+            print(f"Removing {key}")
             try:
                 self.plot_elements[key].remove()
             except NotImplementedError:
