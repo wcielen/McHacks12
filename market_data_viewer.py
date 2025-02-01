@@ -44,6 +44,9 @@ class MarketDataViewer(QMainWindow):
         self.last_bid_price_state = self.bid_price_check.isChecked()
         self.last_ask_price_state = self.ask_price_check.isChecked()
         self.last_trades_state = self.trades_check.isChecked()
+        self.last_min_max_state = self.min_max_check.isChecked()
+        self.last_std_dev_30s_state = self.std_dev_30s_check.isChecked()
+        self.last_std_dev_60s_state = self.std_dev_60s_check.isChecked()
 
     def _setup_ui(self):
         self.setWindowTitle("Market Data Viewer")
@@ -128,9 +131,19 @@ class MarketDataViewer(QMainWindow):
         trades_need_update = (selected_stocks != self.last_selected_stocks) or \
                                     (period != self.last_selected_period) or \
                                     trades_toggle_changed
+        
+        min_max_changed = self.min_max_check.isChecked() != self.last_min_max_state
+        min_max_need_update = (selected_stocks != self.last_selected_stocks) or \
+                                    (period != self.last_selected_period) or \
+                                    min_max_changed
+        
+        std_dev_changed = self.std_dev_60s_check.isChecked() != self.last_std_dev_60s_state or self.std_dev_30s_check.isChecked() != self.last_std_dev_30s_state
+        std_dev_need_update = (selected_stocks != self.last_selected_stocks) or \
+                                    (period != self.last_selected_period) or \
+                                    std_dev_changed
 
 
-        self._clear_plots(not predictions_need_update, not pnl_need_update, not bid_price_need_update, not ask_price_need_update, not trades_need_update)
+        self._clear_plots(not predictions_need_update, not pnl_need_update, not bid_price_need_update, not ask_price_need_update, not trades_need_update, not min_max_need_update, not std_dev_need_update)
 
         with ThreadPoolExecutor() as executor:
             futures = []
@@ -148,6 +161,14 @@ class MarketDataViewer(QMainWindow):
                         futures.append(executor.submit(self._plot_ask_price, market_data, stock))
                     if not ask_price_need_update:
                         print("asks already updated")
+                    if self.min_max_check.isChecked() and min_max_need_update:
+                        futures.append(executor.submit(self._plot_min_max_lines, market_data, stock))
+                    if not min_max_need_update:
+                        print("min max already updated")
+                    if (self.std_dev_30s_check.isChecked() or self.std_dev_60s_check.isChecked()) and std_dev_need_update:
+                        futures.append(executor.submit(self._plot_standard_deviation, market_data, stock))
+                    if not std_dev_changed:
+                        print("std's are up to date")
 
                     # Run plot_predictions and calculate_and_plot_pnl in parallel
                     if self.prediction_check.isChecked()  and predictions_need_update: #should check if it actually changed
@@ -187,6 +208,9 @@ class MarketDataViewer(QMainWindow):
         self.last_bid_price_state = self.bid_price_check.isChecked()
         self.last_ask_price_state = self.ask_price_check.isChecked()
         self.last_trades_state = self.trades_check.isChecked()
+        self.last_min_max_state = self.min_max_check.isChecked()
+        self.last_std_dev_30s_state = self.std_dev_30s_check.isChecked()
+        self.last_std_dev_60s_state = self.std_dev_60s_check.isChecked()
 
 
     def _plot_market_data(self, market_data: pd.DataFrame, stock: str):
@@ -358,7 +382,7 @@ class MarketDataViewer(QMainWindow):
 
 
 
-    def _clear_plots(self, keep_predictions=False, keep_pnl=False, keep_bid_price=False, keep_ask_price=False, keep_trades=False):
+    def _clear_plots(self, keep_predictions=False, keep_pnl=False, keep_bid_price=False, keep_ask_price=False, keep_trades=False, keep_min_max=False, keep_stds=False):
         #self.ax_price.cla()
         #self.ax_pnl.cla()
         for key in list(self.plot_elements.keys()):
@@ -376,6 +400,12 @@ class MarketDataViewer(QMainWindow):
                 continue
             if keep_trades and 'trade' in key:
                 print("found trades")
+                continue
+            if keep_min_max and ('min' in key or 'max' in key):
+                print("found min max")
+                continue
+            if keep_stds and 'std' in key:
+                print("found stds")
                 continue
 
             print(f"Removing {key}")
