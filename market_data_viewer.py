@@ -41,6 +41,9 @@ class MarketDataViewer(QMainWindow):
         self.last_prediction_state = self.prediction_check.isChecked()
         self.last_pnl_state = self.pnl_check.isChecked()
         self.last_pnl_percent_state = self.pnl_percent_check.isChecked()
+        self.last_bid_price_state = self.bid_price_check.isChecked()
+        self.last_ask_price_state = self.ask_price_check.isChecked()
+        self.last_trades_state = self.trades_check.isChecked()
 
     def _setup_ui(self):
         self.setWindowTitle("Market Data Viewer")
@@ -100,8 +103,8 @@ class MarketDataViewer(QMainWindow):
         period = self.period_combo.currentText()
         selected_stocks = [stock for stock, checkbox in self.stock_checkboxes.items()
                            if checkbox.isChecked()]
+        
         prediction_toggle_changed = self.prediction_check.isChecked() != self.last_prediction_state
-
         predictions_need_update = (selected_stocks != self.last_selected_stocks) or \
                             (period != self.last_selected_period) or \
                             prediction_toggle_changed
@@ -111,8 +114,23 @@ class MarketDataViewer(QMainWindow):
                             (period != self.last_selected_period) or \
                             pnl_toggle_changed
         
+        bid_price_toggle_changed = self.bid_price_check.isChecked() != self.last_bid_price_state
+        bid_price_need_update = (selected_stocks != self.last_selected_stocks) or \
+                                    (period != self.last_selected_period) or \
+                                    bid_price_toggle_changed
+        
+        ask_price_toggle_changed = self.ask_price_check.isChecked() != self.last_ask_price_state
+        ask_price_need_update = (selected_stocks != self.last_selected_stocks) or \
+                                    (period != self.last_selected_period) or \
+                                    ask_price_toggle_changed
+        
+        trades_toggle_changed = self.trades_check.isChecked() != self.last_trades_state
+        trades_need_update = (selected_stocks != self.last_selected_stocks) or \
+                                    (period != self.last_selected_period) or \
+                                    trades_toggle_changed
 
-        self._clear_plots(not predictions_need_update, not pnl_need_update)
+
+        self._clear_plots(not predictions_need_update, not pnl_need_update, not bid_price_need_update, not ask_price_need_update, not trades_need_update)
 
         with ThreadPoolExecutor() as executor:
             futures = []
@@ -122,7 +140,14 @@ class MarketDataViewer(QMainWindow):
 
                 market_data = self.data_loader.load_market_data(data_dir, stock)
                 if market_data is not None:
-                    self._plot_market_data(market_data, stock)
+                    if self.bid_price_check.isChecked() and bid_price_need_update:
+                        futures.append(executor.submit(self._plot_bid_price, market_data, stock))
+                    if not bid_price_need_update:
+                        print("bids already updated")
+                    if self.ask_price_check.isChecked() and ask_price_need_update:
+                        futures.append(executor.submit(self._plot_ask_price, market_data, stock))
+                    if not ask_price_need_update:
+                        print("asks already updated")
 
                     # Run plot_predictions and calculate_and_plot_pnl in parallel
                     if self.prediction_check.isChecked()  and predictions_need_update: #should check if it actually changed
@@ -137,12 +162,15 @@ class MarketDataViewer(QMainWindow):
 
                     del market_data
                     gc.collect()
-
-                trade_data = self.data_loader.load_trade_data(data_dir, stock)
-                if trade_data is not None:
-                    self._plot_trade_data(trade_data, stock)
-                    del trade_data
-                    gc.collect()
+                if self.trades_check.isChecked() and trades_need_update:
+                    trade_data = self.data_loader.load_trade_data(data_dir, stock)
+                    if trade_data is not None:
+                        futures.append(executor.submit(self._plot_trade_data,trade_data, stock))
+                        del trade_data
+                        gc.collect()
+                if not trades_need_update:
+                    print("trades already updated")
+                
 
             # Wait for all futures to complete
             for future in futures: #is this necessary????
@@ -156,6 +184,9 @@ class MarketDataViewer(QMainWindow):
         self.last_prediction_state = self.prediction_check.isChecked()
         self.last_pnl_state = self.pnl_check.isChecked()
         self.last_pnl_percent_state = self.pnl_percent_check.isChecked()
+        self.last_bid_price_state = self.bid_price_check.isChecked()
+        self.last_ask_price_state = self.ask_price_check.isChecked()
+        self.last_trades_state = self.trades_check.isChecked()
 
 
     def _plot_market_data(self, market_data: pd.DataFrame, stock: str):
@@ -176,6 +207,26 @@ class MarketDataViewer(QMainWindow):
 
         self._plot_standard_deviation(market_data, stock) #Std and min/max could also be done in parallel
         self._plot_min_max_lines(market_data, stock)
+    
+    def _plot_bid_price(self, market_data: pd.DataFrame, stock: str):
+        if market_data is None:
+            return
+
+        if self.bid_price_check.isChecked():
+            line, = self.ax_price.plot(market_data['timestamp'],
+                                       market_data['bidPrice'],
+                                       label=f'{stock} Bid Price')
+            self.plot_elements[f'{stock}_bid'] = line
+
+    def _plot_ask_price(self, market_data: pd.DataFrame, stock: str):
+        if market_data is None:
+            return
+            
+        if self.ask_price_check.isChecked():
+            line, = self.ax_price.plot(market_data['timestamp'],
+                                       market_data['askPrice'],
+                                       label=f'{stock} Ask Price')
+            self.plot_elements[f'{stock}_ask'] = line
 
     def _plot_min_max_lines(self, market_data: pd.DataFrame, stock: str):
         if not self.min_max_check.isChecked():
@@ -256,7 +307,7 @@ class MarketDataViewer(QMainWindow):
             return
 
         line, = self.ax_price.plot(
-            trade_data['timestamp'], # same here, I think it be slightly better if we extracted the info frist, we could also down sample tbh
+            trade_data['timestamp'], # same here, I think it be slightly better if we extracted the info first, we could also down sample tbh
             trade_data['price'],
             linestyle='-',
             marker='',
@@ -265,7 +316,7 @@ class MarketDataViewer(QMainWindow):
         )
         self.plot_elements[f'{stock}_trade'] = line
 
-    def _calculate_and_plot_pnl(self, market_data: pd.DataFrame, stock: str):
+    def _calculate_and_plot_pnl(self, market_data: pd.DataFrame, stock: str): #only the y-axis really changes between % and total, don't need to replot the graph, just change the label and axis
         print("calculating pnl")
         if not self.pnl_check.isChecked() or market_data is None:
             return
@@ -302,13 +353,12 @@ class MarketDataViewer(QMainWindow):
         self.plot_elements[f'{stock}_pnl'] = line
         self.ax_pnl.set_ylabel(ylabel)
 
-        # Ensure y-axis is properly scaled
         self.ax_pnl.relim()
         self.ax_pnl.autoscale_view()
 
 
 
-    def _clear_plots(self, keep_predictions=False, keep_pnl=False):
+    def _clear_plots(self, keep_predictions=False, keep_pnl=False, keep_bid_price=False, keep_ask_price=False, keep_trades=False):
         #self.ax_price.cla()
         #self.ax_pnl.cla()
         for key in list(self.plot_elements.keys()):
@@ -318,6 +368,16 @@ class MarketDataViewer(QMainWindow):
             if keep_pnl and 'pnl' in key:
                 print("found pnl")
                 continue
+            if keep_bid_price and 'bid' in key:
+                print("found bids")
+                continue
+            if keep_ask_price and 'ask' in key:
+                print("found who asked")
+                continue
+            if keep_trades and 'trade' in key:
+                print("found trades")
+                continue
+
             print(f"Removing {key}")
             try:
                 self.plot_elements[key].remove()
