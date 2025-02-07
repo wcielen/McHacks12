@@ -169,14 +169,11 @@ class MarketDataViewer(QMainWindow):
                         futures.append(executor.submit(self._plot_standard_deviation, market_data, stock))
                     if not std_dev_changed:
                         print("std's are up to date")
-
-                    # Run plot_predictions and calculate_and_plot_pnl in parallel
-                    if self.prediction_check.isChecked()  and predictions_need_update: #should check if it actually changed
+                    if self.prediction_check.isChecked()  and predictions_need_update: 
                         futures.append(executor.submit(self._plot_predictions, market_data, stock))
                     if not predictions_need_update:
                         print("predictions already updated")
-
-                    if self.pnl_check.isChecked() and pnl_need_update: #same here no need to recalc if it hasn't changed
+                    if self.pnl_check.isChecked() and pnl_need_update: 
                         futures.append(executor.submit(self._calculate_and_plot_pnl, market_data, stock))
                     if not pnl_need_update:
                         print("pnl already updated")
@@ -192,9 +189,7 @@ class MarketDataViewer(QMainWindow):
                 if not trades_need_update:
                     print("trades already updated")
                 
-
-            # Wait for all futures to complete
-            for future in futures: #is this necessary????
+            for future in futures: 
                 future.result()  
 
         self._update_plot_layout()
@@ -229,8 +224,6 @@ class MarketDataViewer(QMainWindow):
                                        label=f'{stock} Ask Price')
             self.plot_elements[f'{stock}_ask'] = line
 
-        self._plot_standard_deviation(market_data, stock) #Std and min/max could also be done in parallel
-        self._plot_min_max_lines(market_data, stock)
     
     def _plot_bid_price(self, market_data: pd.DataFrame, stock: str):
         if market_data is None:
@@ -256,13 +249,13 @@ class MarketDataViewer(QMainWindow):
         if not self.min_max_check.isChecked():
             return
 
-        min_price = market_data['bidPrice'].min() # We could definitely find both in one sweep, could even find them when we initially plot the graph or use Dask
-        max_price = market_data['askPrice'].max()
+        min_max_values = market_data[['bidPrice', 'askPrice']].agg({'bidPrice': 'min', 'askPrice': 'max'})
+        min_price, max_price = min_max_values['bidPrice'], min_max_values['askPrice']
 
         min_line = self.ax_price.axhline(y=min_price, color='red', linestyle=':',
-                                         label=f'{stock} Min Price ({min_price:.2f})')
+                                     label=f'{stock} Min Price ({min_price:.2f})')
         max_line = self.ax_price.axhline(y=max_price, color='green', linestyle=':',
-                                         label=f'{stock} Max Price ({max_price:.2f})')
+                                     label=f'{stock} Max Price ({max_price:.2f})')
 
         self.plot_elements[f'{stock}_min'] = min_line
         self.plot_elements[f'{stock}_max'] = max_line
