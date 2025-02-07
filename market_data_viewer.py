@@ -413,17 +413,27 @@ class MarketDataViewer(QMainWindow):
         self.ax_price.set_xlabel('')
         self.ax_price.set_ylabel('Price')
         self.ax_price.set_title(f"{self.period_combo.currentText()} - Selected Stocks")
+    
+        # Autoscale the price axis
+        self.ax_price.relim()
+        self.ax_price.autoscale_view()
+    
         if self.ax_price.get_lines() or self.ax_price.collections:
-            self.ax_price.legend() #shouldnot have to remake the legend if it hasn't changed
+            self.ax_price.legend()
 
         self.ax_pnl.set_visible(self.pnl_check.isChecked())
         if self.pnl_check.isChecked():
             self.ax_pnl.set_xlabel('Time')
+        
+            # Autoscale the PnL axis
+            self.ax_pnl.relim()
+            self.ax_pnl.autoscale_view()
+        
             if self.ax_pnl.get_lines():
                 self.ax_pnl.legend()
 
         plt.tight_layout()
-        self.canvas.draw() #could draw_idle instead...?
+        self.canvas.draw_idle()  # More efficient drawing method
 
     def update_plot_visibility(self):
         needs_reload = False
